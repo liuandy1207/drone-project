@@ -25,7 +25,20 @@ cube_body = p.createMultiBody(
     baseOrientation=cube_start_orientation
 )
 
+# CONSTANT FORCE VECTOR  
+# Example: push **left** along -X direction with 5 Newtons
+force_vector = [-5, 0, 0]   # (Fx, Fy, Fz)
+
 # Run the simulation
 while True:
+    # Apply force to the cube’s base link (-1 means base link)
+    p.applyExternalForce(
+        objectUniqueId=cube_body,
+        linkIndex=-1,
+        forceObj=force_vector,
+        posObj=[0, 0, 0],        # apply force at the cube center
+        flags=p.WORLD_FRAME      # force defined in world coordinates
+    )
+
     p.stepSimulation()
     time.sleep(0.0005)
