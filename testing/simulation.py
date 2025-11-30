@@ -23,6 +23,7 @@ drone = p.loadURDF(
 p.changeVisualShape(drone, -1, rgbaColor=[1,0,0,1])
 
 # Loop
+
 while True:
     p.stepSimulation()
     time.sleep(0.001)
