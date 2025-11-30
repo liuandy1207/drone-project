@@ -1,28 +1,109 @@
 <?xml version="1.0"?>
 <robot name="drone">
 
-  <link name="base">
+  <!-- ====================== BODY LINK ====================== -->
 
+  <link name="base">
     <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0"/>
       <mass value="1.5"/>
-      <inertia ixx="0.02" iyy="0.02" izz="0.04" ixy="0" ixz="0" iyz="0"/>
+      <inertia ixx="0.02" iyy="0.02" izz="0.04"
+               ixy="0" ixz="0" iyz="0"/>
     </inertial>
 
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0"/>
       <geometry>
-        <mesh filename="drone.stl" scale="0.001 0.001 0.001"/>  <!-- often needed -->
+        <mesh filename="drone.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
 
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0"/>
       <geometry>
         <mesh filename="drone.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
-
   </link>
+
+
+  <!-- ====================== PROPELLER 1 ====================== -->
+
+  <link name="prop1">
+    <visual>
+      <origin xyz="-11.504 12.236 -0.289"/>
+      <geometry>
+        <mesh filename="prop1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="prop1_joint" type="revolute">
+    <parent link="base"/>
+    <child link="prop1"/>
+    <origin xyz="-11.504 12.236 -0.289"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1" velocity="1000" lower="-3.14" upper="3.14"/>
+  </joint>
+
+
+  <!-- ====================== PROPELLER 2 ====================== -->
+
+  <link name="prop2">
+    <visual>
+      <origin xyz="6.795 12.319 -0.441"/>
+      <geometry>
+        <mesh filename="prop2.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="prop2_joint" type="revolute">
+    <parent link="base"/>
+    <child link="prop2"/>
+    <origin xyz="6.795 12.319 -0.441"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1" velocity="1000" lower="-3.14" upper="3.14"/>
+  </joint>
+
+
+  <!-- ====================== PROPELLER 3 ====================== -->
+
+  <link name="prop3">
+    <visual>
+      <origin xyz="-10.643 -8.545 2.418"/>
+      <geometry>
+        <mesh filename="prop3.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="prop3_joint" type="revolute">
+    <parent link="base"/>
+    <child link="prop3"/>
+    <origin xyz="-10.643 -8.545 2.418"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1" velocity="1000" lower="-3.14" upper="3.14"/>
+  </joint>
+
+
+  <!-- ====================== PROPELLER 4 ====================== -->
+
+  <link name="prop4">
+    <visual>
+      <origin xyz="6.527 -8.015 2.409"/>
+      <geometry>
+        <mesh filename="prop4.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="prop4_joint" type="revolute">
+    <parent link="base"/>
+    <child link="prop4"/>
+    <origin xyz="6.527 -8.015 2.409"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1" velocity="1000" lower="-3.14" upper="3.14"/>
+  </joint>
 
 </robot>
