@@ -35,118 +35,155 @@ class OUWindGenerator:
 # ========== QUADCOPTER ==========
 class Quadcopter:
     def __init__(self, dt=0.01):
-        self.mass = 0.51
-        self.weight = 5.0
-        self.dt = dt
-        
+        # Physical properties
+        self.mass = 0.51                     # mass of the quadcopter (kg)
+        self.weight = 5.0                    # gravitational force mg (N)
+
+        self.dt = dt                         # simulation timestep (s)
+
+        # State vector: [x, y, z, vx, vy, vz, pitch, roll]
         self.state = np.zeros(8)
-        
-        self.max_thrust = 1000.0
-        self.hover_thrust = self.weight / 4
-        
+
+        # Motor thrust limits
+        self.max_thrust = 10            # maximum thrust a motor can output
+        self.hover_thrust = self.weight / 4  # thrust needed per motor to hover
         self.motor_thrusts = np.array([self.hover_thrust] * 4)
-        
-        self.kp_pos = np.array([8.0, 8.0, 20.0])
-        self.kd_pos = np.array([4.0, 4.0, 10.0])
-        
-        self.ki_z = 0.5
-        self.integral_z = 0
-        
+
+        # Position controller gains (PD + integral on z)
+        self.kp_pos = np.array([8.0, 8.0, 20.0])   # proportional gains (x,y,z)
+        self.kd_pos = np.array([4.0, 4.0, 10.0])   # derivative gains (x,y,z)
+        self.ki_z = 0.5                            # integral gain for altitude
+        self.integral_z = 0                        # accumulated z-error
+
+        # Logging history
         self.positions = []
         self.angles = []
         self.motor_history = []
         self.forces = []
-        
+
     def update(self, wind):
+        # Extract position, velocity, pitch, and roll
         pos = self.state[0:3]
         vel = self.state[3:6]
         pitch = self.state[6]
         roll = self.state[7]
-        
+
+        # Position error (target is (0,0,0))
         error = -pos
-        
+
+        # PD controller to compute desired acceleration
         desired_acc = self.kp_pos * error + self.kd_pos * (-vel)
-        
+
+        # Integral control only for altitude (z-axis)
         self.integral_z += error[2] * self.dt
         self.integral_z = np.clip(self.integral_z, -1, 1)
         desired_acc[2] += self.ki_z * self.integral_z
-        
+
+        # Clamp acceleration so it doesn’t demand unrealistic forces
         max_acc = 15.0
         desired_acc = np.clip(desired_acc, -max_acc, max_acc)
-        
+
+        # Convert desired accelerations → required forces
         total_force_needed = self.mass * desired_acc
+
+        # Add gravity compensation
         total_force_needed[2] += self.weight
+
+        # Add wind disturbance compensation
         total_force_needed += -wind * 0.3
-        
+
+        # Magnitude of thrust needed
         thrust_mag_needed = np.linalg.norm(total_force_needed)
-        
+
+        # Calculate desired pitch & roll based on force direction
         if thrust_mag_needed > 0.01:
             thrust_dir = total_force_needed / thrust_mag_needed
-            
+
+            # Horizontal thrust components determine pitch & roll
             fx_ratio = np.clip(thrust_dir[0], -0.9, 0.9)
             fy_ratio = np.clip(thrust_dir[1], -0.9, 0.9)
-            
+
             desired_pitch = np.arcsin(fx_ratio)
             desired_roll = -np.arcsin(fy_ratio)
         else:
+            # If no force required, reset angles
             desired_pitch = 0
             desired_roll = 0
             thrust_mag_needed = self.weight
-        
+
+        # Clamp pitch & roll angles to ±45°
         max_angle = np.radians(45)
         desired_pitch = np.clip(desired_pitch, -max_angle, max_angle)
         desired_roll = np.clip(desired_roll, -max_angle, max_angle)
-        
+
+        # First-order angle response (simulates inertia + motor lag)
         angle_tau = 0.08
         self.state[6] += (desired_pitch - pitch) * self.dt / angle_tau
         self.state[7] += (desired_roll - roll) * self.dt / angle_tau
-        
+
+        # Update angles after dynamics
         pitch = self.state[6]
         roll = self.state[7]
-        
+
+        # Compute base thrust and mixing for 4 motors
         base_thrust = thrust_mag_needed / 4
-        pitch_adj = pitch * 5.0
-        roll_adj = roll * 5.0
-        
+        pitch_adj = pitch 
+        roll_adj = roll 
+
+        # Motor thrust mixing (simplified quadcopter mixer)
         self.motor_thrusts = np.array([
-            base_thrust - roll_adj + pitch_adj,
-            base_thrust + roll_adj + pitch_adj,
-            base_thrust - roll_adj - pitch_adj,
-            base_thrust + roll_adj - pitch_adj
+            base_thrust - roll_adj + pitch_adj,   # Front-left
+            base_thrust + roll_adj + pitch_adj,   # Front-right
+            base_thrust - roll_adj - pitch_adj,   # Back-left
+            base_thrust + roll_adj - pitch_adj    # Back-right
         ])
-        
+
+        # Prevent motors from going to zero (numerical stability)
         self.motor_thrusts = np.maximum(self.motor_thrusts, 0.1)
-        
+
+        # Compute thrust forces in world frame
         total_thrust = np.sum(self.motor_thrusts)
         thrust_x = np.sin(pitch) * total_thrust
         thrust_y = -np.sin(roll) * total_thrust
         thrust_z = np.cos(pitch) * np.cos(roll) * total_thrust
-        
         thrust_force = np.array([thrust_x, thrust_y, thrust_z])
+
+        # Aerodynamic drag (opposes velocity relative to wind)
         drag_coeff = 0.2
         drag_force = -drag_coeff * (vel - wind)
+
+        # Gravity
         gravity_force = np.array([0, 0, -self.weight])
-        
+
+        # Net force
         total_force = thrust_force + drag_force + gravity_force
+
+        # F = ma → compute acceleration
         acceleration = total_force / self.mass
-        
+
+        # Update velocity with acceleration
         self.state[3:6] += acceleration * self.dt
-        
+
+        # Clamp max velocity
         max_vel = 5.0
         vel_mag = np.linalg.norm(self.state[3:6])
         if vel_mag > max_vel:
             self.state[3:6] = self.state[3:6] / vel_mag * max_vel
-        
+
+        # Update position
         self.state[0:3] += self.state[3:6] * self.dt
+
+        # Limit position to within ±10 m
         self.state[0:3] = np.clip(self.state[0:3], -10, 10)
-        
+
+        # Logging
         self.positions.append(pos.copy())
         self.angles.append([pitch, roll])
         self.motor_history.append(self.motor_thrusts.copy())
         self.forces.append(total_force.copy())
-        
-        return self.state
 
+        return self.state
+    
 # ========== MAIN SIMULATION ==========
 def main():
     dt = 0.01
