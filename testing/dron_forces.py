@@ -1,427 +1,439 @@
-"""
-REALISTIC QUADCOPTER PHYSICS: Proper motor mixing and thrust vectoring
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-import math
 
-# --------------------------
-# Physical & sim parameters
-# --------------------------
-rho = 1.225          # air density (kg/m^3)
-g = 9.81             # gravity (m/s^2)
+print("=" * 80)
+print("QUADCOPTER SIMULATION - COMPLETE WITH WIND PLOTS")
+print("=" * 80)
 
-# Quadcopter physical parameters - typical 250-300mm frame
-mass = 0.8           # kg (including battery)
-weight = mass * g    # N
+# ========== OU WIND GENERATOR ==========
+class OUWindGenerator:
+    def __init__(self, dt=0.01):
+        self.dt = dt
+        self.wind = np.zeros(3)
+        self.wind_history = []
+        
+    def update(self):
+        theta = 0.15
+        mu_h = 0
+        sigma_h = 2.78
+        mu_v = 0
+        sigma_v = 0.56
+        
+        self.wind[0] += theta * (mu_h - self.wind[0]) * self.dt + \
+                       sigma_h * np.sqrt(self.dt) * np.random.randn()
+        self.wind[1] += theta * (mu_h - self.wind[1]) * self.dt + \
+                       sigma_h * np.sqrt(self.dt) * np.random.randn()
+        self.wind[2] += theta * (mu_v - self.wind[2]) * self.dt + \
+                       sigma_v * np.sqrt(self.dt) * np.random.randn()
+        
+        self.wind[2] = np.clip(self.wind[2], -0.8, 0.8)
+        
+        self.wind_history.append(self.wind.copy())
+        return self.wind
 
-# Motor parameters - typical 2204-2300KV motors with 5-6" props
-thrust_per_motor_max = 4.5  # N per motor (approx 450g thrust each)
-combined_thrust_max = thrust_per_motor_max * 4  # 18N total
-thrust_per_motor_hover = weight / 4.0  # hover thrust per motor
-
-# Physical dimensions
-arm_length = 0.15    # m (from center to motor)
-body_width = 0.18    # m
-body_height = 0.06   # m
-
-# Moment of inertia (approximate for symmetric quadcopter)
-I_xx = 0.01          # kg*m^2 (roll inertia)
-I_yy = 0.01          # kg*m^2 (pitch inertia) 
-I_zz = 0.02          # kg*m^2 (yaw inertia)
-
-# Drag coefficients (simplified)
-C_d_horizontal = 1.2
-A_frontal = body_width * body_height  # frontal area
-
-print(f"Drone mass: {mass} kg, Weight: {weight:.1f} N")
-print(f"Max thrust/motor: {thrust_per_motor_max:.1f} N, Total: {combined_thrust_max:.1f} N")
-print(f"Thrust-to-weight ratio: {combined_thrust_max/weight:.1f}:1")
-
-# REALISTIC WIND PARAMETERS - gentle breeze that won't blow drone away
-WIND_MAX_SPEED = 0.8    # m/s - very gentle breeze (2.9 km/h)
-WIND_SIGMA_HORIZONTAL = 0.2  # m/s
-WIND_SIGMA_VERTICAL = 0.1    # m/s
-
-# Time stepping
-dt = 0.01            # 100Hz control loop - realistic for drones
-t_final = 30.0       # simulation time
-nt = int(t_final / dt)
-
-# 3D wind components
-wind_u, wind_v, wind_w = 0.0, 0.0, 0.0
-
-def update_wind_gentle():
-    """Very gentle wind that won't overwhelm the drone"""
-    global wind_u, wind_v, wind_w
-    
-    # Slow, correlated wind changes (not completely random each step)
-    base_u = 0.95 * wind_u + 0.05 * np.random.normal(0, WIND_SIGMA_HORIZONTAL)
-    base_v = 0.95 * wind_v + 0.05 * np.random.normal(0, WIND_SIGMA_HORIZONTAL)  
-    base_w = 0.95 * wind_w + 0.05 * np.random.normal(0, WIND_SIGMA_VERTICAL)
-    
-    # Hard limit to very gentle wind
-    wind_speed = math.sqrt(base_u**2 + base_v**2 + base_w**2)
-    if wind_speed > WIND_MAX_SPEED:
-        scale = WIND_MAX_SPEED / wind_speed
-        base_u *= scale
-        base_v *= scale
-        base_w *= scale
-    
-    wind_u, wind_v, wind_w = base_u, base_v, base_w
-    return wind_u, wind_v, wind_w
-
-def calculate_drag_force(velocity, area, C_d, rho):
-    """Calculate drag force in one direction"""
-    return -0.5 * rho * C_d * area * velocity * abs(velocity)
-
-# --------------------------
-# REALISTIC DRONE PERFORMANCE CONSTRAINTS
-# --------------------------
-# Based on typical consumer drone capabilities
-MAX_TILT_ANGLE = np.radians(30)  # Maximum 30 degrees tilt - realistic limit
-MAX_ASCENT_RATE = 2.0            # m/s - realistic vertical speed
-MAX_DESCENT_RATE = 1.5           # m/s  
-MAX_HORIZONTAL_SPEED = 3.0       # m/s - conservative
-
-print(f"\nDRONE PERFORMANCE LIMITS:")
-print(f"Max tilt angle: {np.degrees(MAX_TILT_ANGLE):.0f}°")
-print(f"Max horizontal speed: {MAX_HORIZONTAL_SPEED:.1f} m/s")
-print(f"Max wind speed: {WIND_MAX_SPEED:.1f} m/s ({WIND_MAX_SPEED*3.6:.1f} km/h)")
-
-# PID CONTROLLER GAINS - tuned for stable quadcopter control
-# Position controller (outer loop)
-pos_kp = 1.5; pos_kd = 2.0; pos_ki = 0.1
-
-# Attitude controller (inner loop) - much faster response
-att_kp = 8.0; att_kd = 1.5
-
-# Altitude controller  
-alt_kp = 25.0; alt_kd = 12.0; alt_ki = 2.0
-
-# Integral terms
-integral_x = 0.0; integral_y = 0.0; integral_z = 0.0
-
-# Target position
-target_x, target_y, target_z = 0.0, 0.0, 2.0  # 2m altitude
-
-# --------------------------
-# PROPER QUADCOPTER DYNAMICS
-# --------------------------
+# ========== QUADCOPTER ==========
 class Quadcopter:
-    def __init__(self):
-        # State: position, velocity, orientation, angular velocity
-        self.position = np.array([0.0, 0.0, 2.0])  # x, y, z
-        self.velocity = np.array([0.0, 0.0, 0.0])  # vx, vy, vz
-        self.orientation = np.array([0.0, 0.0, 0.0])  # roll, pitch, yaw (radians)
-        self.angular_velocity = np.array([0.0, 0.0, 0.0])  # p, q, r (rad/s)
+    def __init__(self, dt=0.01):
+        self.mass = 0.51
+        self.weight = 5.0
+        self.dt = dt
         
-        # Motor thrusts (N)
-        self.motor_thrusts = np.array([thrust_per_motor_hover] * 4)
+        self.state = np.zeros(8)
         
-    def get_rotation_matrix(self):
-        """Get rotation matrix from current orientation (roll, pitch, yaw)"""
-        phi, theta, psi = self.orientation
+        self.max_thrust = 1000.0
+        self.hover_thrust = self.weight / 4
         
-        # ZYX rotation (yaw-pitch-roll)
-        R_x = np.array([[1, 0, 0],
-                       [0, np.cos(phi), -np.sin(phi)],
-                       [0, np.sin(phi), np.cos(phi)]])
+        self.motor_thrusts = np.array([self.hover_thrust] * 4)
         
-        R_y = np.array([[np.cos(theta), 0, np.sin(theta)],
-                       [0, 1, 0],
-                       [-np.sin(theta), 0, np.cos(theta)]])
+        self.kp_pos = np.array([8.0, 8.0, 20.0])
+        self.kd_pos = np.array([4.0, 4.0, 10.0])
         
-        R_z = np.array([[np.cos(psi), -np.sin(psi), 0],
-                       [np.sin(psi), np.cos(psi), 0],
-                       [0, 0, 1]])
+        self.ki_z = 0.5
+        self.integral_z = 0
         
-        return R_z @ R_y @ R_x  # Rotation from body to world frame
-    
-    def get_thrust_vector(self):
-        """Calculate total thrust vector in world coordinates"""
-        # Thrust in body frame (always along body z-axis)
-        total_thrust = np.sum(self.motor_thrusts)
-        thrust_body = np.array([0, 0, total_thrust])
+        self.positions = []
+        self.angles = []
+        self.motor_history = []
+        self.forces = []
         
-        # Rotate to world frame
-        R = self.get_rotation_matrix()
-        thrust_world = R @ thrust_body
+    def update(self, wind):
+        pos = self.state[0:3]
+        vel = self.state[3:6]
+        pitch = self.state[6]
+        roll = self.state[7]
         
-        return thrust_world
-    
-    def calculate_motor_torques(self):
-        """Calculate torques generated by motor thrust differences"""
-        # Motor arrangement: 
-        # 0: front-right (CW), 1: front-left (CCW)
-        # 2: back-left (CW), 3: back-right (CCW)
+        error = -pos
         
-        # Roll torque (difference between left and right motors)
-        roll_torque = (self.motor_thrusts[1] + self.motor_thrusts[2] - 
-                      self.motor_thrusts[0] - self.motor_thrusts[3]) * arm_length
+        desired_acc = self.kp_pos * error + self.kd_pos * (-vel)
         
-        # Pitch torque (difference between front and back motors)  
-        pitch_torque = (self.motor_thrusts[0] + self.motor_thrusts[1] -
-                       self.motor_thrusts[2] - self.motor_thrusts[3]) * arm_length
+        self.integral_z += error[2] * self.dt
+        self.integral_z = np.clip(self.integral_z, -1, 1)
+        desired_acc[2] += self.ki_z * self.integral_z
         
-        # Yaw torque (difference between CW and CCW motors)
-        # CW motors: 0, 2; CCW motors: 1, 3
-        yaw_torque = (self.motor_thrusts[0] + self.motor_thrusts[2] -
-                     self.motor_thrusts[1] - self.motor_thrusts[3]) * 0.1  # smaller moment arm
+        max_acc = 15.0
+        desired_acc = np.clip(desired_acc, -max_acc, max_acc)
         
-        return np.array([roll_torque, pitch_torque, yaw_torque])
-    
-    def update_dynamics(self, dt, wind_force):
-        """Update quadcopter dynamics using proper physics"""
-        # Total forces in world frame
-        thrust_world = self.get_thrust_vector()
-        gravity_force = np.array([0, 0, -weight])
+        total_force_needed = self.mass * desired_acc
+        total_force_needed[2] += self.weight
+        total_force_needed += -wind * 0.3
         
-        # Net force
-        net_force = thrust_world + gravity_force + wind_force
+        thrust_mag_needed = np.linalg.norm(total_force_needed)
         
-        # Linear acceleration (F = ma)
-        acceleration = net_force / mass
-        
-        # Update linear motion
-        self.velocity += acceleration * dt
-        self.position += self.velocity * dt
-        
-        # Angular motion - torques cause angular acceleration
-        motor_torques = self.calculate_motor_torques()
-        
-        # Simple damping torques (aerodynamic drag on rotation)
-        damping_torques = -0.1 * self.angular_velocity
-        
-        # Total torques
-        net_torque = motor_torques + damping_torques
-        
-        # Angular acceleration (τ = Iα)
-        I = np.array([I_xx, I_yy, I_zz])
-        angular_acceleration = net_torque / I
-        
-        # Update angular motion
-        self.angular_velocity += angular_acceleration * dt
-        self.orientation += self.angular_velocity * dt
-        
-        # Limit orientation to prevent unrealistic angles
-        self.orientation[0] = np.clip(self.orientation[0], -MAX_TILT_ANGLE, MAX_TILT_ANGLE)  # roll
-        self.orientation[1] = np.clip(self.orientation[1], -MAX_TILT_ANGLE, MAX_TILT_ANGLE)  # pitch
-        
-        # Limit velocities
-        horizontal_speed = np.linalg.norm(self.velocity[:2])
-        if horizontal_speed > MAX_HORIZONTAL_SPEED:
-            scale = MAX_HORIZONTAL_SPEED / horizontal_speed
-            self.velocity[0] *= scale
-            self.velocity[1] *= scale
+        if thrust_mag_needed > 0.01:
+            thrust_dir = total_force_needed / thrust_mag_needed
             
-        self.velocity[2] = np.clip(self.velocity[2], -MAX_DESCENT_RATE, MAX_ASCENT_RATE)
+            fx_ratio = np.clip(thrust_dir[0], -0.9, 0.9)
+            fy_ratio = np.clip(thrust_dir[1], -0.9, 0.9)
+            
+            desired_pitch = np.arcsin(fx_ratio)
+            desired_roll = -np.arcsin(fy_ratio)
+        else:
+            desired_pitch = 0
+            desired_roll = 0
+            thrust_mag_needed = self.weight
         
-        # Prevent going below ground
-        if self.position[2] < 0.1:
-            self.position[2] = 0.1
-            self.velocity[2] = max(0, self.velocity[2])
+        max_angle = np.radians(45)
+        desired_pitch = np.clip(desired_pitch, -max_angle, max_angle)
+        desired_roll = np.clip(desired_roll, -max_angle, max_angle)
+        
+        angle_tau = 0.08
+        self.state[6] += (desired_pitch - pitch) * self.dt / angle_tau
+        self.state[7] += (desired_roll - roll) * self.dt / angle_tau
+        
+        pitch = self.state[6]
+        roll = self.state[7]
+        
+        base_thrust = thrust_mag_needed / 4
+        pitch_adj = pitch * 5.0
+        roll_adj = roll * 5.0
+        
+        self.motor_thrusts = np.array([
+            base_thrust - roll_adj + pitch_adj,
+            base_thrust + roll_adj + pitch_adj,
+            base_thrust - roll_adj - pitch_adj,
+            base_thrust + roll_adj - pitch_adj
+        ])
+        
+        self.motor_thrusts = np.maximum(self.motor_thrusts, 0.1)
+        
+        total_thrust = np.sum(self.motor_thrusts)
+        thrust_x = np.sin(pitch) * total_thrust
+        thrust_y = -np.sin(roll) * total_thrust
+        thrust_z = np.cos(pitch) * np.cos(roll) * total_thrust
+        
+        thrust_force = np.array([thrust_x, thrust_y, thrust_z])
+        drag_coeff = 0.2
+        drag_force = -drag_coeff * (vel - wind)
+        gravity_force = np.array([0, 0, -self.weight])
+        
+        total_force = thrust_force + drag_force + gravity_force
+        acceleration = total_force / self.mass
+        
+        self.state[3:6] += acceleration * self.dt
+        
+        max_vel = 5.0
+        vel_mag = np.linalg.norm(self.state[3:6])
+        if vel_mag > max_vel:
+            self.state[3:6] = self.state[3:6] / vel_mag * max_vel
+        
+        self.state[0:3] += self.state[3:6] * self.dt
+        self.state[0:3] = np.clip(self.state[0:3], -10, 10)
+        
+        self.positions.append(pos.copy())
+        self.angles.append([pitch, roll])
+        self.motor_history.append(self.motor_thrusts.copy())
+        self.forces.append(total_force.copy())
+        
+        return self.state
 
-# Initialize quadcopter
-drone = Quadcopter()
+# ========== MAIN SIMULATION ==========
+def main():
+    dt = 0.01
+    duration = 30
+    time_array = np.arange(0, duration, dt)
+    
+    wind_gen = OUWindGenerator(dt)
+    drone = Quadcopter(dt)
+    
+    print("\nQUADCOPTER SPECS:")
+    print(f"  Weight: {drone.weight:.2f}N")
+    print(f"  Max thrust: {4*drone.max_thrust:.0f}N ({4*drone.max_thrust/drone.weight:.0f}x weight)")
+    print(f"  Wind: +/-10 km/h horizontal, +/-2-3 km/h vertical")
+    print("\nStarting simulation...")
+    
+    max_deviation = 0
+    start_time = time.time()
+    
+    for i, t in enumerate(time_array):
+        wind = wind_gen.update()
+        state = drone.update(wind)
+        
+        pos = state[0:3]
+        deviation = np.linalg.norm(pos)
+        max_deviation = max(max_deviation, deviation)
+        
+        if i % 500 == 0:
+            pitch_deg = np.degrees(state[6])
+            roll_deg = np.degrees(state[7])
+            print(f"Time: {t:5.1f}s | Pos: [{pos[0]:6.3f}, {pos[1]:6.3f}, {pos[2]:6.3f}] | "
+                  f"Tilt: [{roll_deg:5.1f}, {pitch_deg:5.1f}] deg | Dist: {deviation:5.3f}m")
+    
+    print(f"\nSimulation complete in {time.time() - start_time:.1f} seconds!")
+    print(f"Maximum deviation from origin: {max_deviation:.3f}m")
+    
+    plot_results(drone, time_array, wind_gen)
 
-# Motor mixing function
-def motor_mixing(collective_thrust, roll_torque, pitch_torque, yaw_torque):
-    """
-    Convert desired thrust and torques to individual motor commands
-    Standard quadcopter mixing:
-    T0 = collective + pitch + roll - yaw  (front-right)
-    T1 = collective + pitch - roll + yaw  (front-left) 
-    T2 = collective - pitch - roll - yaw  (back-left)
-    T3 = collective - pitch + roll + yaw  (back-right)
-    """
-    base = collective_thrust / 4.0
+def plot_results(drone, time_array, wind_gen):
+    positions = np.array(drone.positions)
+    angles = np.degrees(np.array(drone.angles))
+    motors = np.array(drone.motor_history)
+    forces = np.array(drone.forces)
     
-    # Convert torques to thrust differences
-    roll_scale = roll_torque / (2.0 * arm_length)
-    pitch_scale = pitch_torque / (2.0 * arm_length) 
-    yaw_scale = yaw_torque / 4.0
+    wind_history = np.array(wind_gen.wind_history)
+    wind_kmh = wind_history * 3.6
     
-    # Mix to individual motors
-    T0 = base + pitch_scale + roll_scale - yaw_scale  # front-right
-    T1 = base + pitch_scale - roll_scale + yaw_scale  # front-left
-    T2 = base - pitch_scale - roll_scale - yaw_scale  # back-left  
-    T3 = base - pitch_scale + roll_scale + yaw_scale  # back-right
+    fig = plt.figure(figsize=(20, 18))
     
-    return np.array([T0, T1, T2, T3])
-
-# History for plotting
-history = {
-    't': [], 'wind_u': [], 'wind_v': [], 'wind_w': [],
-    'roll': [], 'pitch': [], 'yaw': [],
-    'x': [], 'y': [], 'z': [],
-    'total_thrust': [], 'horizontal_speed': [],
-    'motor_thrusts': []
-}
-
-print(f"\nSIMULATION STARTING")
-print(f"Target position: ({target_x}, {target_y}, {target_z})")
-print("="*60)
-
-# --------------------------
-# MAIN SIMULATION LOOP
-# --------------------------
-for n in range(nt):
-    t = n * dt
+    # 1. WIND PLOTS
+    ax1 = plt.subplot(4, 4, 1)
+    ax1.plot(time_array, wind_kmh[:, 0], 'b-', linewidth=1.5, alpha=0.8)
+    ax1.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+    ax1.axhline(y=10, color='r', linestyle='--', alpha=0.5)
+    ax1.axhline(y=-10, color='r', linestyle='--', alpha=0.5)
+    ax1.set_ylabel('Wind Speed (km/h)')
+    ax1.set_title('WIND X vs TIME')
+    ax1.grid(True, alpha=0.3)
+    ax1.set_ylim([-15, 15])
     
-    # Update gentle wind
-    wind_u, wind_v, wind_w = update_wind_gentle()
+    ax2 = plt.subplot(4, 4, 2)
+    ax2.plot(time_array, wind_kmh[:, 1], 'g-', linewidth=1.5, alpha=0.8)
+    ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+    ax2.axhline(y=10, color='r', linestyle='--', alpha=0.5)
+    ax2.axhline(y=-10, color='r', linestyle='--', alpha=0.5)
+    ax2.set_ylabel('Wind Speed (km/h)')
+    ax2.set_title('WIND Y vs TIME')
+    ax2.grid(True, alpha=0.3)
+    ax2.set_ylim([-15, 15])
     
-    # Calculate wind force on drone (simplified)
-    v_rel_x = drone.velocity[0] - wind_u
-    v_rel_y = drone.velocity[1] - wind_v  
-    v_rel_z = drone.velocity[2] - wind_w
+    ax3 = plt.subplot(4, 4, 3)
+    ax3.plot(time_array, wind_kmh[:, 2], 'r-', linewidth=1.5, alpha=0.8)
+    ax3.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+    ax3.axhline(y=3, color='orange', linestyle='--', alpha=0.5)
+    ax3.axhline(y=-2, color='orange', linestyle='--', alpha=0.5)
+    ax3.set_ylabel('Wind Speed (km/h)')
+    ax3.set_title('VERTICAL WIND vs TIME')
+    ax3.grid(True, alpha=0.3)
+    ax3.set_ylim([-5, 5])
     
-    F_wind_x = calculate_drag_force(v_rel_x, A_frontal, C_d_horizontal, rho)
-    F_wind_y = calculate_drag_force(v_rel_y, A_frontal, C_d_horizontal, rho) 
-    F_wind_z = calculate_drag_force(v_rel_z, A_frontal, 0.5, rho)  # less vertical drag
+    ax4 = plt.subplot(4, 4, 4)
+    ax4.plot(time_array, wind_kmh[:, 0], 'b-', alpha=0.7, linewidth=1)
+    ax4.plot(time_array, wind_kmh[:, 1], 'g-', alpha=0.7, linewidth=1)
+    ax4.plot(time_array, wind_kmh[:, 2], 'r-', alpha=0.7, linewidth=1)
+    ax4.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+    ax4.set_ylabel('Wind Speed (km/h)')
+    ax4.set_title('ALL WIND COMPONENTS')
+    ax4.grid(True, alpha=0.3)
+    ax4.legend(['Wind X', 'Wind Y', 'Wind Z'], loc='upper right', fontsize=8)
     
-    wind_force = np.array([F_wind_x, F_wind_y, F_wind_z])
+    # 2. POSITION PLOTS
+    ax5 = plt.subplot(4, 4, 5)
+    ax5.plot(time_array, positions[:, 0], 'b-', linewidth=2)
+    ax5.axhline(y=0, color='r', linestyle='--', linewidth=2)
+    ax5.set_ylabel('X Position (m)')
+    ax5.set_title('DRONE X POSITION vs TIME')
+    ax5.grid(True, alpha=0.3)
+    ax5.set_ylim([-0.5, 0.5])
     
-    # POSITION CONTROL (outer loop) - generates desired tilt angles
-    pos_error = np.array([target_x, target_y, target_z]) - drone.position
+    ax6 = plt.subplot(4, 4, 6)
+    ax6.plot(time_array, positions[:, 1], 'g-', linewidth=2)
+    ax6.axhline(y=0, color='r', linestyle='--', linewidth=2)
+    ax6.set_ylabel('Y Position (m)')
+    ax6.set_title('DRONE Y POSITION vs TIME')
+    ax6.grid(True, alpha=0.3)
+    ax6.set_ylim([-0.5, 0.5])
     
-    # Update integrals with anti-windup
-    integral_x += pos_error[0] * dt
-    integral_y += pos_error[1] * dt  
-    integral_z += pos_error[2] * dt
-    integral_x = np.clip(integral_x, -2.0, 2.0)
-    integral_y = np.clip(integral_y, -2.0, 2.0)
-    integral_z = np.clip(integral_z, -1.0, 1.0)
+    ax7 = plt.subplot(4, 4, 7)
+    ax7.plot(time_array, positions[:, 2], 'r-', linewidth=2)
+    ax7.axhline(y=0, color='r', linestyle='--', linewidth=2)
+    ax7.set_ylabel('Z Position (m)')
+    ax7.set_title('DRONE ALTITUDE vs TIME')
+    ax7.grid(True, alpha=0.3)
+    ax7.set_ylim([-0.3, 0.3])
     
-    # PID position control
-    desired_vx = pos_kp * pos_error[0] + pos_kd * (-drone.velocity[0]) + pos_ki * integral_x
-    desired_vy = pos_kp * pos_error[1] + pos_kd * (-drone.velocity[1]) + pos_ki * integral_y
+    # 3. MOTOR THRUST PERCENTAGE
+    thrust_percent = (motors / drone.max_thrust) * 100
+    hover_percent = (drone.hover_thrust / drone.max_thrust) * 100
     
-    # Convert desired horizontal velocity to tilt angles
-    # This is the key insight: tilt creates horizontal acceleration
-    current_total_thrust = np.sum(drone.motor_thrusts)
-    if current_total_thrust > weight * 0.8:  # Only if we have sufficient thrust
-        # desired_acceleration = thrust * sin(tilt) / mass
-        # So: tilt ≈ arcsin(mass * desired_acceleration / thrust)
-        desired_pitch = np.arcsin(np.clip(mass * desired_vx / current_total_thrust, -0.8, 0.8))
-        desired_roll = -np.arcsin(np.clip(mass * desired_vy / current_total_thrust, -0.8, 0.8))
+    ax8 = plt.subplot(4, 4, 8)
+    ax8.plot(time_array, thrust_percent[:, 0], 'b-', alpha=0.7, linewidth=1)
+    ax8.plot(time_array, thrust_percent[:, 1], 'g-', alpha=0.7, linewidth=1)
+    ax8.plot(time_array, thrust_percent[:, 2], 'r-', alpha=0.7, linewidth=1)
+    ax8.plot(time_array, thrust_percent[:, 3], 'orange', alpha=0.7, linewidth=1)
+    ax8.axhline(y=hover_percent, color='k', linestyle='--', linewidth=2, label=f'Hover ({hover_percent:.4f}%)')
+    ax8.set_ylabel('Motor Thrust (%)')
+    ax8.set_title('MOTOR THRUST PERCENTAGE vs TIME')
+    ax8.grid(True, alpha=0.3)
+    ax8.legend(loc='upper right', fontsize=7)
+    ax8.set_ylim([hover_percent-0.01, hover_percent+0.02])
+    
+    # 4. TILT ANGLES
+    ax9 = plt.subplot(4, 4, 9)
+    ax9.plot(time_array, angles[:, 1], 'b-', linewidth=2, label='Pitch')
+    ax9.plot(time_array, angles[:, 0], 'g-', linewidth=2, label='Roll')
+    ax9.axhline(y=0, color='k', alpha=0.3)
+    ax9.axhline(y=45, color='r', linestyle='--', alpha=0.5, label='Max +/-45')
+    ax9.axhline(y=-45, color='r', linestyle='--', alpha=0.5)
+    ax9.set_ylabel('Tilt Angle (deg)')
+    ax9.set_title('PITCH AND ROLL ANGLES vs TIME')
+    ax9.grid(True, alpha=0.3)
+    ax9.legend(loc='upper right', fontsize=8)
+    ax9.set_ylim([-50, 50])
+    
+    # 5. FORCES
+    ax10 = plt.subplot(4, 4, 10)
+    ax10.plot(time_array, forces[:, 0], 'b-', alpha=0.7, linewidth=1, label='Force X')
+    ax10.plot(time_array, forces[:, 1], 'g-', alpha=0.7, linewidth=1, label='Force Y')
+    ax10.plot(time_array, forces[:, 2], 'r-', alpha=0.7, linewidth=1, label='Force Z')
+    ax10.axhline(y=0, color='k', alpha=0.3)
+    ax10.axhline(y=drone.weight, color='purple', linestyle='--', alpha=0.5, label=f'Weight ({drone.weight}N)')
+    ax10.set_ylabel('Force (N)')
+    ax10.set_title('FORCES ON DRONE vs TIME')
+    ax10.grid(True, alpha=0.3)
+    ax10.legend(loc='upper right', fontsize=7)
+    
+    # 6. DISTANCE FROM ORIGIN
+    distance = np.sqrt(positions[:, 0]**2 + positions[:, 1]**2 + positions[:, 2]**2)
+    ax11 = plt.subplot(4, 4, 11)
+    ax11.plot(time_array, distance, 'purple', linewidth=3)
+    ax11.axhline(y=0, color='k', alpha=0.3)
+    ax11.axhline(y=0.1, color='g', linestyle='--', linewidth=2, label='0.1m tolerance')
+    ax11.set_xlabel('Time (s)')
+    ax11.set_ylabel('Distance from Origin (m)')
+    ax11.set_title('TOTAL ERROR vs TIME')
+    ax11.grid(True, alpha=0.3)
+    ax11.legend(loc='upper right', fontsize=8)
+    ax11.set_ylim([0, 0.5])
+    
+    # 7. CONTROL RELATIONSHIPS
+    ax12 = plt.subplot(4, 4, 12)
+    scatter = ax12.scatter(positions[:, 0], angles[:, 1], c=time_array, 
+                          cmap='coolwarm', alpha=0.7, s=10)
+    ax12.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+    ax12.axvline(x=0, color='k', linestyle='-', alpha=0.3)
+    ax12.set_xlabel('X Position (m)')
+    ax12.set_ylabel('Pitch Angle (deg)')
+    ax12.set_title('CONTROL: X Position vs Pitch')
+    ax12.grid(True, alpha=0.3)
+    ax12.set_xlim([-0.5, 0.5])
+    ax12.set_ylim([-50, 50])
+    
+    # 8. WIND MAGNITUDE
+    ax13 = plt.subplot(4, 4, 13)
+    wind_magnitude = np.sqrt(wind_kmh[:, 0]**2 + wind_kmh[:, 1]**2)
+    ax13.plot(time_array, wind_magnitude, 'blue', linewidth=2, alpha=0.7, label='Horizontal Wind')
+    ax13.plot(time_array, np.abs(wind_kmh[:, 2]), 'red', linewidth=2, alpha=0.7, label='Vertical Wind')
+    ax13.axhline(y=10, color='b', linestyle='--', alpha=0.5, label='10 km/h typical')
+    ax13.axhline(y=3, color='r', linestyle='--', alpha=0.5, label='3 km/h typical')
+    ax13.set_xlabel('Time (s)')
+    ax13.set_ylabel('Wind Speed (km/h)')
+    ax13.set_title('WIND MAGNITUDE vs TIME')
+    ax13.grid(True, alpha=0.3)
+    ax13.legend(loc='upper right', fontsize=7)
+    
+    # 9. WIND DIRECTION
+    ax14 = plt.subplot(4, 4, 14)
+    wind_direction = np.degrees(np.arctan2(wind_kmh[:, 1], wind_kmh[:, 0]))
+    ax14.plot(time_array, wind_direction, 'purple', linewidth=1.5, alpha=0.7)
+    ax14.set_xlabel('Time (s)')
+    ax14.set_ylabel('Wind Direction (deg)')
+    ax14.set_title('WIND DIRECTION (0 deg = East)')
+    ax14.grid(True, alpha=0.3)
+    ax14.set_ylim([-180, 180])
+    
+    # 10. MOTOR THRUSTS IN NEWTONS
+    ax15 = plt.subplot(4, 4, 15)
+    ax15.plot(time_array, motors[:, 0], 'b-', alpha=0.7, linewidth=1)
+    ax15.plot(time_array, motors[:, 1], 'g-', alpha=0.7, linewidth=1)
+    ax15.plot(time_array, motors[:, 2], 'r-', alpha=0.7, linewidth=1)
+    ax15.plot(time_array, motors[:, 3], 'orange', alpha=0.7, linewidth=1)
+    ax15.axhline(y=drone.hover_thrust, color='k', linestyle='--', linewidth=2, label=f'Hover ({drone.hover_thrust:.2f}N)')
+    ax15.set_xlabel('Time (s)')
+    ax15.set_ylabel('Motor Thrust (N)')
+    ax15.set_title('MOTOR THRUSTS vs TIME')
+    ax15.grid(True, alpha=0.3)
+    ax15.legend(loc='upper right', fontsize=6)
+    
+    # 11. 3D TRAJECTORY
+    ax16 = plt.subplot(4, 4, 16, projection='3d')
+    
+    ax16.plot(positions[:, 0], positions[:, 1], positions[:, 2], 
+             'b-', alpha=0.7, linewidth=1)
+    
+    ax16.scatter(0, 0, 0, c='red', s=100, marker='*', label='Target (0,0,0)')
+    
+    ax16.set_xlabel('X (m)')
+    ax16.set_ylabel('Y (m)')
+    ax16.set_zlabel('Z (m)')
+    ax16.set_title('3D TRAJECTORY')
+    ax16.legend()
+    ax16.grid(True, alpha=0.3)
+    
+    ax16.set_xlim([-0.5, 0.5])
+    ax16.set_ylim([-0.5, 0.5])
+    ax16.set_zlim([-0.3, 0.3])
+    
+    plt.suptitle('QUADCOPTER SIMULATION WITH COMPLETE WIND ANALYSIS', 
+                fontsize=16, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    plt.show()
+    
+    # ========== WIND STATISTICS ==========
+    print("\n" + "=" * 80)
+    print("WIND STATISTICS")
+    print("=" * 80)
+    
+    print(f"\nWind Speeds (km/h):")
+    print(f"  X-direction: Mean = {np.mean(wind_kmh[:, 0]):.1f}, Std = {np.std(wind_kmh[:, 0]):.1f}, Max = {np.max(np.abs(wind_kmh[:, 0])):.1f}")
+    print(f"  Y-direction: Mean = {np.mean(wind_kmh[:, 1]):.1f}, Std = {np.std(wind_kmh[:, 1]):.1f}, Max = {np.max(np.abs(wind_kmh[:, 1])):.1f}")
+    print(f"  Z-direction: Mean = {np.mean(wind_kmh[:, 2]):.1f}, Std = {np.std(wind_kmh[:, 2]):.1f}, Max = {np.max(np.abs(wind_kmh[:, 2])):.1f}")
+    
+    horizontal_wind = np.sqrt(wind_kmh[:, 0]**2 + wind_kmh[:, 1]**2)
+    print(f"\nHorizontal Wind Magnitude:")
+    print(f"  Mean: {np.mean(horizontal_wind):.1f} km/h")
+    print(f"  Max: {np.max(horizontal_wind):.1f} km/h")
+    
+    # ========== PERFORMANCE ANALYSIS ==========
+    print("\n" + "=" * 80)
+    print("PERFORMANCE ANALYSIS")
+    print("=" * 80)
+    
+    final_pos = positions[-1]
+    final_dist = np.linalg.norm(final_pos)
+    avg_dist = np.mean(distance)
+    max_dist = np.max(distance)
+    
+    print(f"\nFinal Position: [{final_pos[0]:.4f}, {final_pos[1]:.4f}, {final_pos[2]:.4f}] m")
+    print(f"Final Distance from Origin: {final_dist:.4f} m")
+    print(f"Average Distance: {avg_dist:.4f} m")
+    print(f"Maximum Distance: {max_dist:.4f} m")
+    
+    success_x = abs(final_pos[0]) < 0.1
+    success_y = abs(final_pos[1]) < 0.1
+    success_z = abs(final_pos[2]) < 0.1
+    
+    print(f"\nAxis Performance:")
+    print(f"  X-axis: {'PASS' if success_x else 'FAIL'} Final: {final_pos[0]:.3f}m (target: 0m)")
+    print(f"  Y-axis: {'PASS' if success_y else 'FAIL'} Final: {final_pos[1]:.3f}m (target: 0m)")
+    print(f"  Z-axis: {'PASS' if success_z else 'FAIL'} Final: {final_pos[2]:.3f}m (target: 0m)")
+    
+    if success_x and success_y and success_z:
+        print("\nSUCCESS! All axes maintain origin despite wind!")
     else:
-        desired_roll, desired_pitch = 0.0, 0.0
+        print("\nSome axes need improvement")
     
-    # Limit tilt angles
-    desired_roll = np.clip(desired_roll, -MAX_TILT_ANGLE, MAX_TILT_ANGLE)
-    desired_pitch = np.clip(desired_pitch, -MAX_TILT_ANGLE, MAX_TILT_ANGLE)
-    
-    # ALTITUDE CONTROL
-    alt_error = target_z - drone.position[2]
-    desired_thrust = alt_kp * alt_error + alt_kd * (-drone.velocity[2]) + alt_ki * integral_z + weight
-    desired_thrust = np.clip(desired_thrust, weight * 0.5, combined_thrust_max * 0.9)
-    
-    # ATTITUDE CONTROL (inner loop) - much faster response
-    roll_error = desired_roll - drone.orientation[0]
-    pitch_error = desired_pitch - drone.orientation[1]
-    yaw_error = 0.0 - drone.orientation[2]  # maintain current yaw
-    
-    # PD attitude control - generates desired torques
-    roll_torque = att_kp * roll_error + att_kd * (-drone.angular_velocity[0])
-    pitch_torque = att_kp * pitch_error + att_kd * (-drone.angular_velocity[1]) 
-    yaw_torque = att_kp * yaw_error + att_kd * (-drone.angular_velocity[2])
-    
-    # MOTOR MIXING - convert to individual motor thrusts
-    motor_commands = motor_mixing(desired_thrust, roll_torque, pitch_torque, yaw_torque)
-    
-    # Apply motor limits
-    motor_commands = np.clip(motor_commands, 0.1, thrust_per_motor_max)
-    drone.motor_thrusts = motor_commands
-    
-    # UPDATE PHYSICS
-    drone.update_dynamics(dt, wind_force)
-    
-    # RECORD HISTORY
-    history['t'].append(t)
-    history['wind_u'].append(wind_u)
-    history['wind_v'].append(wind_v) 
-    history['wind_w'].append(wind_w)
-    history['roll'].append(np.degrees(drone.orientation[0]))
-    history['pitch'].append(np.degrees(drone.orientation[1]))
-    history['yaw'].append(np.degrees(drone.orientation[2]))
-    history['x'].append(drone.position[0])
-    history['y'].append(drone.position[1])
-    history['z'].append(drone.position[2])
-    history['total_thrust'].append(np.sum(drone.motor_thrusts))
-    history['horizontal_speed'].append(np.linalg.norm(drone.velocity[:2]))
-    history['motor_thrusts'].append(drone.motor_thrusts.copy())
-    
-    # Periodic status
-    if n % (nt//20) == 0:
-        pos_error_mag = np.linalg.norm(pos_error)
-        tilt_angle = np.degrees(np.linalg.norm(drone.orientation[:2]))
-        print(f"t={t:4.1f}s err={pos_error_mag:5.3f}m tilt={tilt_angle:4.1f}° thrust={np.sum(drone.motor_thrusts):4.1f}N")
+    print(f"\nMaximum Wind Encountered: {np.max(horizontal_wind):.1f} km/h")
+    print(f"Drone Thrust/Weight Ratio: {4*drone.max_thrust/drone.weight:.0f}:1")
 
-# --------------------------
-# PLOTTING
-# --------------------------
-plt.figure(figsize=(16, 12))
-
-# Graph 1: Wind components
-plt.subplot(2, 2, 1)
-plt.plot(history['t'], history['wind_u'], 'r-', label='Wind X', alpha=0.8)
-plt.plot(history['t'], history['wind_v'], 'g-', label='Wind Y', alpha=0.8)
-plt.plot(history['t'], history['wind_w'], 'b-', label='Wind Z', alpha=0.8)
-plt.axhline(y=WIND_MAX_SPEED, color='red', linestyle='--', alpha=0.5, label=f'Max ({WIND_MAX_SPEED}m/s)')
-plt.xlabel('Time (s)'); plt.ylabel('Wind Speed (m/s)')
-plt.legend(); plt.grid(True, alpha=0.3)
-plt.title('Gentle 3D Wind (Drone can easily compensate)')
-
-# Graph 2: Orientation
-plt.subplot(2, 2, 2)
-plt.plot(history['t'], history['roll'], 'r-', label='Roll', alpha=0.8)
-plt.plot(history['t'], history['pitch'], 'g-', label='Pitch', alpha=0.8)
-plt.plot(history['t'], history['yaw'], 'b-', label='Yaw', alpha=0.8)
-plt.axhline(y=np.degrees(MAX_TILT_ANGLE), color='red', linestyle='--', alpha=0.5, label='Max tilt')
-plt.axhline(y=-np.degrees(MAX_TILT_ANGLE), color='red', linestyle='--', alpha=0.5)
-plt.xlabel('Time (s)'); plt.ylabel('Angle (degrees)')
-plt.legend(); plt.grid(True, alpha=0.3)
-plt.title('Drone Orientation (Tilt creates horizontal motion)')
-
-# Graph 3: Position
-plt.subplot(2, 2, 3)
-plt.plot(history['t'], history['x'], 'r-', label='X', alpha=0.8)
-plt.plot(history['t'], history['y'], 'g-', label='Y', alpha=0.8)
-plt.plot(history['t'], history['z'], 'b-', label='Z', alpha=0.8)
-plt.axhline(y=target_z, color='b', linestyle='--', alpha=0.5, label='Target Z')
-plt.xlabel('Time (s)'); plt.ylabel('Position (m)')
-plt.legend(); plt.grid(True, alpha=0.3)
-plt.title('3D Position (Maintains altitude despite wind)')
-
-# Graph 4: Motor thrusts
-plt.subplot(2, 2, 4)
-motor_thrusts = np.array(history['motor_thrusts'])
-plt.plot(history['t'], motor_thrusts[:, 0], 'r-', label='Motor 0 (FR)', alpha=0.8)
-plt.plot(history['t'], motor_thrusts[:, 1], 'g-', label='Motor 1 (FL)', alpha=0.8)
-plt.plot(history['t'], motor_thrusts[:, 2], 'b-', label='Motor 2 (BL)', alpha=0.8)
-plt.plot(history['t'], motor_thrusts[:, 3], 'orange', label='Motor 3 (BR)', alpha=0.8)
-plt.axhline(y=thrust_per_motor_hover, color='black', linestyle='--', alpha=0.5, label='Hover thrust')
-plt.xlabel('Time (s)'); plt.ylabel('Thrust (N)')
-plt.legend(); plt.grid(True, alpha=0.3)
-plt.title('Individual Motor Thrusts (How drone actually controls itself)')
-
-plt.tight_layout()
-plt.show()
-
-# Performance summary
-final_error = np.linalg.norm(np.array([target_x, target_y, target_z]) - drone.position)
-max_tilt = max(np.linalg.norm(np.column_stack([history['roll'], history['pitch']]), axis=1))
-max_wind = max([math.sqrt(wu**2 + wv**2 + ww**2) for wu, wv, ww in zip(history['wind_u'], history['wind_v'], history['wind_w'])])
-
-print("\n" + "="*60)
-print("PERFORMANCE SUMMARY")
-print("="*60)
-print(f"Final position error: {final_error:.3f} m")
-print(f"Max tilt angle: {max_tilt:.1f}° (limit: {np.degrees(MAX_TILT_ANGLE):.0f}°)")
-print(f"Max wind speed: {max_wind:.2f} m/s")
-print(f"Wind recoverability: {'EXCELLENT' if max_wind < 1.0 else 'GOOD'}")
-print("="*60)
+if __name__ == "__main__":
+    main()
