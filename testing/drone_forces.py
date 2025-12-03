@@ -228,36 +228,6 @@ def plot_results(drone, time_array, wind_gen):
     fig = plt.figure(figsize=(20, 18))
     
     # 1. WIND PLOTS
-    ax1 = plt.subplot(4, 4, 1)
-    ax1.plot(time_array, wind_kmh[:, 0], 'b-', linewidth=1.5, alpha=0.8)
-    ax1.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-    ax1.axhline(y=10, color='r', linestyle='--', alpha=0.5)
-    ax1.axhline(y=-10, color='r', linestyle='--', alpha=0.5)
-    ax1.set_ylabel('Wind Speed (km/h)')
-    ax1.set_title('WIND X vs TIME')
-    ax1.grid(True, alpha=0.3)
-    ax1.set_ylim([-15, 15])
-    
-    ax2 = plt.subplot(4, 4, 2)
-    ax2.plot(time_array, wind_kmh[:, 1], 'g-', linewidth=1.5, alpha=0.8)
-    ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-    ax2.axhline(y=10, color='r', linestyle='--', alpha=0.5)
-    ax2.axhline(y=-10, color='r', linestyle='--', alpha=0.5)
-    ax2.set_ylabel('Wind Speed (km/h)')
-    ax2.set_title('WIND Y vs TIME')
-    ax2.grid(True, alpha=0.3)
-    ax2.set_ylim([-15, 15])
-    
-    ax3 = plt.subplot(4, 4, 3)
-    ax3.plot(time_array, wind_kmh[:, 2], 'r-', linewidth=1.5, alpha=0.8)
-    ax3.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-    ax3.axhline(y=3, color='orange', linestyle='--', alpha=0.5)
-    ax3.axhline(y=-2, color='orange', linestyle='--', alpha=0.5)
-    ax3.set_ylabel('Wind Speed (km/h)')
-    ax3.set_title('VERTICAL WIND vs TIME')
-    ax3.grid(True, alpha=0.3)
-    ax3.set_ylim([-5, 5])
-    
     ax4 = plt.subplot(4, 4, 4)
     ax4.plot(time_array, wind_kmh[:, 0], 'b-', alpha=0.7, linewidth=1)
     ax4.plot(time_array, wind_kmh[:, 1], 'g-', alpha=0.7, linewidth=1)
@@ -268,46 +238,18 @@ def plot_results(drone, time_array, wind_gen):
     ax4.grid(True, alpha=0.3)
     ax4.legend(['Wind X', 'Wind Y', 'Wind Z'], loc='upper right', fontsize=8)
     
-    # 2. POSITION PLOTS
-    ax5 = plt.subplot(4, 4, 5)
-    ax5.plot(time_array, positions[:, 0], 'b-', linewidth=2)
-    ax5.axhline(y=0, color='r', linestyle='--', linewidth=2)
-    ax5.set_ylabel('X Position (m)')
-    ax5.set_title('DRONE X POSITION vs TIME')
-    ax5.grid(True, alpha=0.3)
-    ax5.set_ylim([-0.5, 0.5])
-    
-    ax6 = plt.subplot(4, 4, 6)
-    ax6.plot(time_array, positions[:, 1], 'g-', linewidth=2)
-    ax6.axhline(y=0, color='r', linestyle='--', linewidth=2)
-    ax6.set_ylabel('Y Position (m)')
-    ax6.set_title('DRONE Y POSITION vs TIME')
-    ax6.grid(True, alpha=0.3)
-    ax6.set_ylim([-0.5, 0.5])
+    # 2. POSITION PLOT
     
     ax7 = plt.subplot(4, 4, 7)
-    ax7.plot(time_array, positions[:, 2], 'r-', linewidth=2)
+    ax7.plot(time_array, positions[:, 0], 'b-', linewidth=2, label='X Position')
+    ax7.plot(time_array, positions[:, 1], 'g-', linewidth=2, label='Y Position')
+    ax7.plot(time_array, positions[:, 2], 'r-', linewidth=2, label='Z Position')
     ax7.axhline(y=0, color='r', linestyle='--', linewidth=2)
-    ax7.set_ylabel('Z Position (m)')
-    ax7.set_title('DRONE ALTITUDE vs TIME')
+    ax7.set_ylabel('Position (m)')
+    ax7.set_title('DRONE POSITION vs TIME')
     ax7.grid(True, alpha=0.3)
+    ax7.legend(loc='upper right', fontsize=8)
     ax7.set_ylim([-0.3, 0.3])
-    
-    # 3. MOTOR THRUST PERCENTAGE
-    thrust_percent = (motors / drone.max_thrust) * 100
-    hover_percent = (drone.hover_thrust / drone.max_thrust) * 100
-    
-    ax8 = plt.subplot(4, 4, 8)
-    ax8.plot(time_array, thrust_percent[:, 0], 'b-', alpha=0.7, linewidth=1)
-    ax8.plot(time_array, thrust_percent[:, 1], 'g-', alpha=0.7, linewidth=1)
-    ax8.plot(time_array, thrust_percent[:, 2], 'r-', alpha=0.7, linewidth=1)
-    ax8.plot(time_array, thrust_percent[:, 3], 'orange', alpha=0.7, linewidth=1)
-    ax8.axhline(y=hover_percent, color='k', linestyle='--', linewidth=2, label=f'Hover ({hover_percent:.4f}%)')
-    ax8.set_ylabel('Motor Thrust (%)')
-    ax8.set_title('MOTOR THRUST PERCENTAGE vs TIME')
-    ax8.grid(True, alpha=0.3)
-    ax8.legend(loc='upper right', fontsize=7)
-    ax8.set_ylim([hover_percent-0.01, hover_percent+0.02])
     
     # 4. TILT ANGLES
     ax9 = plt.subplot(4, 4, 9)
@@ -328,7 +270,6 @@ def plot_results(drone, time_array, wind_gen):
     ax10.plot(time_array, forces[:, 1], 'g-', alpha=0.7, linewidth=1, label='Force Y')
     ax10.plot(time_array, forces[:, 2], 'r-', alpha=0.7, linewidth=1, label='Force Z')
     ax10.axhline(y=0, color='k', alpha=0.3)
-    ax10.axhline(y=drone.weight, color='purple', linestyle='--', alpha=0.5, label=f'Weight ({drone.weight}N)')
     ax10.set_ylabel('Force (N)')
     ax10.set_title('FORCES ON DRONE vs TIME')
     ax10.grid(True, alpha=0.3)
@@ -347,31 +288,6 @@ def plot_results(drone, time_array, wind_gen):
     ax11.legend(loc='upper right', fontsize=8)
     ax11.set_ylim([0, 0.5])
     
-    # 7. CONTROL RELATIONSHIPS
-    ax12 = plt.subplot(4, 4, 12)
-    scatter = ax12.scatter(positions[:, 0], angles[:, 1], c=time_array, 
-                          cmap='coolwarm', alpha=0.7, s=10)
-    ax12.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-    ax12.axvline(x=0, color='k', linestyle='-', alpha=0.3)
-    ax12.set_xlabel('X Position (m)')
-    ax12.set_ylabel('Pitch Angle (deg)')
-    ax12.set_title('CONTROL: X Position vs Pitch')
-    ax12.grid(True, alpha=0.3)
-    ax12.set_xlim([-0.5, 0.5])
-    ax12.set_ylim([-50, 50])
-    
-    # 8. WIND MAGNITUDE
-    ax13 = plt.subplot(4, 4, 13)
-    wind_magnitude = np.sqrt(wind_kmh[:, 0]**2 + wind_kmh[:, 1]**2)
-    ax13.plot(time_array, wind_magnitude, 'blue', linewidth=2, alpha=0.7, label='Horizontal Wind')
-    ax13.plot(time_array, np.abs(wind_kmh[:, 2]), 'red', linewidth=2, alpha=0.7, label='Vertical Wind')
-    ax13.axhline(y=10, color='b', linestyle='--', alpha=0.5, label='10 km/h typical')
-    ax13.axhline(y=3, color='r', linestyle='--', alpha=0.5, label='3 km/h typical')
-    ax13.set_xlabel('Time (s)')
-    ax13.set_ylabel('Wind Speed (km/h)')
-    ax13.set_title('WIND MAGNITUDE vs TIME')
-    ax13.grid(True, alpha=0.3)
-    ax13.legend(loc='upper right', fontsize=7)
     
     # 9. WIND DIRECTION
     ax14 = plt.subplot(4, 4, 14)
