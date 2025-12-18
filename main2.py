@@ -1,55 +1,33 @@
-################################################################################
-#
-#                       THIS THE TITLE OF THE CODE
-#
-# Authors: Andy Liu, John Chen, Melyssa Choi, Yawen Zheng
-################################################################################
+# test_wind.py
 
-################################################################################
-#                         venv set up instructions
-#-------------------------------------------------------------------------------
-# 1. install conda if you don't already have it 
-#    you can check if you have it with `conda --version`
-# 2. create a conda environment if you don't already have it:
-#    `conda create -n pybullet-env python=3.11`
-# 3. activate the environment:
-#    `conda activate pybullet-env`
-# 4. install pybullet:
-#    `conda install -c conda-forge pybullet`
-# remember to re-activate the environment whenever you want to run the program!
-################################################################################
+from drone_forces import OUWindGenerator
+import numpy as np
+import matplotlib.pyplot as plt
 
-# imports
-import pybullet as p        # physics simulator
-import pybullet_data        # some default data for pybullet
-import time
+# Initialize the wind generator
+dt = 0.01
+duration = 10  # seconds
+wind_gen = OUWindGenerator(dt)
 
-p.connect(p.GUI)        # start the GUI
+# Arrays to store wind data
+time_array = np.arange(0, duration, dt)
+wind_history = []
 
-# generate background plane
-p.setAdditionalSearchPath(pybullet_data.getDataPath())
-plane = p.loadURDF("plane.urdf")
+# Generate wind over time
+for t in time_array:
+    wind = wind_gen.update()
+    wind_history.append(wind.copy())
 
-# generate temporary cube
-cube_start_pos = [0, 0, 1]        # 1 meter above the plane
-cube_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
-cube_collision = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.1, 0.1, 0.1])
-cube_visual     = p.createVisualShape(p.GEOM_BOX, 
-                                      halfExtents=[0.1, 0.1, 0.1],
-                                      rgbaColor=[1,0,0,1])  # red cube
-cube = p.createMultiBody(
-    baseMass=1,
-    baseCollisionShapeIndex=cube_collision,
-    baseVisualShapeIndex=cube_visual,
-    basePosition=cube_start_pos,
-    baseOrientation=cube_start_orientation
-)
+wind_history = np.array(wind_history)
 
-# force set up
-p.setGravity(0, 0, -9.81)
-
-
-# run the simulation
-while True:
-    p.stepSimulation()
-    time.sleep(0.0003)      # 0.0003 is slightly slower than reality
+# Plot the wind components
+plt.figure(figsize=(10, 6))
+plt.plot(time_array, wind_history[:,0], label='Wind X')
+plt.plot(time_array, wind_history[:,1], label='Wind Y')
+plt.plot(time_array, wind_history[:,2], label='Wind Z')
+plt.xlabel('Time (s)')
+plt.ylabel('Wind Speed (m/s)')
+plt.title('Ornstein-Uhlenbeck Wind Simulation')
+plt.legend()
+plt.grid(True)
+plt.show()

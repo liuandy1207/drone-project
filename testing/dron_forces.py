@@ -27,8 +27,6 @@ class OUWindGenerator:
         self.wind[2] += theta * (mu_v - self.wind[2]) * self.dt + \
                        sigma_v * np.sqrt(self.dt) * np.random.randn()
         
-        self.wind[2] = np.clip(self.wind[2], -0.8, 0.8)
-        
         self.wind_history.append(self.wind.copy())
         return self.wind
 
@@ -80,8 +78,6 @@ class Quadcopter:
         desired_acc[2] += self.ki_z * self.integral_z
 
         # Clamp acceleration so it doesn’t demand unrealistic forces
-        max_acc = 15.0
-        desired_acc = np.clip(desired_acc, -max_acc, max_acc)
 
         # Convert desired accelerations → required forces
         total_force_needed = self.mass * desired_acc
@@ -163,12 +159,6 @@ class Quadcopter:
 
         # Update velocity with acceleration
         self.state[3:6] += acceleration * self.dt
-
-        # Clamp max velocity
-        max_vel = 5.0
-        vel_mag = np.linalg.norm(self.state[3:6])
-        if vel_mag > max_vel:
-            self.state[3:6] = self.state[3:6] / vel_mag * max_vel
 
         # Update position
         self.state[0:3] += self.state[3:6] * self.dt
