@@ -14,7 +14,7 @@ plane = p.loadURDF("plane.urdf")  # WORKS NOW ✔
 p.setAdditionalSearchPath("./drone")
 
 drone = p.loadURDF(
-    "drone.urdf",
+    "drone1.urdf",
     basePosition=[0, 0, 1],
     useFixedBase=False,
     globalScaling=1

@@ -1,6 +1,6 @@
 ################################################################################
 #
-#                       THIS THE TITLE OF THE CODE
+#                           DRONE SIMULATION
 #
 # Authors: Andy Liu, John Chen, Melyssa Choi, Yawen Zheng
 ################################################################################

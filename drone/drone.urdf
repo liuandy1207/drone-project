@@ -1,8 +1,7 @@
 <?xml version="1.0"?>
 <robot name="drone">
 
-  <!-- ====================== BODY LINK ====================== -->
-
+  <!-- ====================== BASE LINK ====================== -->
   <link name="base">
     <inertial>
       <origin xyz="0 0 0"/>
@@ -26,84 +25,134 @@
     </collision>
   </link>
 
+  <!-- ======================================================== -->
+  <!-- ================ PROPELLER TEMPLATE VALUES ============= -->
+  <!-- mass = 0.01 kg, inertia = very small but nonzero         -->
+  <!-- continuous joint = infinite rotation                      -->
+  <!-- ======================================================== -->
 
   <!-- ====================== PROPELLER 1 ====================== -->
-
   <link name="prop1">
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="0.01"/>
+      <inertia ixx="1e-5" iyy="1e-5" izz="1e-5"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+
     <visual>
       <origin xyz="-11.504 12.236 -0.289"/>
       <geometry>
         <mesh filename="prop1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
+
+    <collision>
+      <origin xyz="-11.504 12.236 -0.289"/>
+      <geometry>
+        <mesh filename="prop1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
   </link>
 
-  <joint name="prop1_joint" type="revolute">
+  <joint name="prop1_joint" type="continuous">
     <parent link="base"/>
     <child link="prop1"/>
     <origin xyz="-11.504 12.236 -0.289"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1" velocity="1000" lower="-3.14" upper="3.14"/>
   </joint>
 
-
   <!-- ====================== PROPELLER 2 ====================== -->
-
   <link name="prop2">
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="0.01"/>
+      <inertia ixx="1e-5" iyy="1e-5" izz="1e-5"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+
     <visual>
       <origin xyz="6.795 12.319 -0.441"/>
       <geometry>
         <mesh filename="prop2.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
+
+    <collision>
+      <origin xyz="6.795 12.319 -0.441"/>
+      <geometry>
+        <mesh filename="prop2.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
   </link>
 
-  <joint name="prop2_joint" type="revolute">
+  <joint name="prop2_joint" type="continuous">
     <parent link="base"/>
     <child link="prop2"/>
     <origin xyz="6.795 12.319 -0.441"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1" velocity="1000" lower="-3.14" upper="3.14"/>
   </joint>
 
-
   <!-- ====================== PROPELLER 3 ====================== -->
-
   <link name="prop3">
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="0.01"/>
+      <inertia ixx="1e-5" iyy="1e-5" izz="1e-5"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+
     <visual>
       <origin xyz="-10.643 -8.545 2.418"/>
       <geometry>
         <mesh filename="prop3.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
+
+    <collision>
+      <origin xyz="-10.643 -8.545 2.418"/>
+      <geometry>
+        <mesh filename="prop3.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
   </link>
 
-  <joint name="prop3_joint" type="revolute">
+  <joint name="prop3_joint" type="continuous">
     <parent link="base"/>
     <child link="prop3"/>
     <origin xyz="-10.643 -8.545 2.418"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1" velocity="1000" lower="-3.14" upper="3.14"/>
   </joint>
 
-
   <!-- ====================== PROPELLER 4 ====================== -->
-
   <link name="prop4">
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="0.01"/>
+      <inertia ixx="1e-5" iyy="1e-5" izz="1e-5"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+
     <visual>
       <origin xyz="6.527 -8.015 2.409"/>
       <geometry>
         <mesh filename="prop4.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
+
+    <collision>
+      <origin xyz="6.527 -8.015 2.409"/>
+      <geometry>
+        <mesh filename="prop4.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
   </link>
 
-  <joint name="prop4_joint" type="revolute">
+  <joint name="prop4_joint" type="continuous">
     <parent link="base"/>
     <child link="prop4"/>
     <origin xyz="6.527 -8.015 2.409"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1" velocity="1000" lower="-3.14" upper="3.14"/>
   </joint>
 
 </robot>
