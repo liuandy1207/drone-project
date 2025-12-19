@@ -3,37 +3,55 @@ import matplotlib.pyplot as plt
 import time
 
 print("=" * 80)
-print("QUADCOPTER SIMULATION - COMPLETE WITH WIND PLOTS")
+print("QUADCOPTER SIMULATION: LINEARIZED NAVIER-STOKES")
 print("=" * 80)
 
-# ========== OU WIND GENERATOR ==========
-class OUWindGenerator:
-    def __init__(self, dt=0.01):
-        #dt is the time step in seconds
+# ========== LNS WIND GENERATOR ==========
+class LNSWindGenerator:
+    def __init__(self, dt=0.01, mean_flow=None):
         self.dt = dt
-        self.wind = np.zeros(3)
-        self.wind_history = []
-        
-    def update(self):
-        #Numerical parameters of the OU process
-        theta = 0.15 #mean reversion rate
-        sigma_h = 2.78 #standard deviation of noise in horizontal direction
-        sigma_v = 0.56 #standard deviation of noise in vertical direction
 
-        #Long term vertical and horizontal average wind speeds are 0 because the drone is centered about the origin
-        mu_h = 0
-        mu_v = 0
-        
-        #Calculate OU process with randomized values
-        self.wind[0] += theta * (mu_h - self.wind[0]) * self.dt + \
-                       sigma_h * np.sqrt(self.dt) * np.random.randn()
-        self.wind[1] += theta * (mu_h - self.wind[1]) * self.dt + \
-                       sigma_h * np.sqrt(self.dt) * np.random.randn()
-        self.wind[2] += theta * (mu_v - self.wind[2]) * self.dt + \
-                       sigma_v * np.sqrt(self.dt) * np.random.randn()
-        
+        #Initialize deviation from mean flow, u', to 0
+        self.wind = np.zeros(3)  
+        self.wind_history = []
+
+        # Matrix A representing velocity decay and wind shear, assumes slower decay in z-direction
+        self.A = np.array([
+            [-0.2, 0.05, 0.0],   
+            [0.05, -0.2, 0.0],   
+            [0.0, 0.0, -0.1]      
+        ])
+
+        # Matrix B representing stochastic forcing
+        self.B = np.array([
+            [0.5, 0.0, 0.0],
+            [0.0, 0.5, 0.0],
+            [0.0, 0.0, 0.2]
+        ])
+
+        # Set maximum deviations in x and y directions
+        self.max_horizontal = 2.78  
+        self.max_vertical = 0.56 
+
+        # Set mean flow to 0
+        self.mean_flow = np.zeros(3)
+
+    def update(self):
+        # Randomly generated 3-D Wiener increments for stochastic forcing
+        dW = np.random.randn(3) * np.sqrt(self.dt)
+
+        # Calculate position update using the Linearized Navier-Stokes equation
+        self.wind += self.A @ self.wind * self.dt + self.B @ dW
+
+        # Apply maximum deviation limits
+        self.wind[0:2] = np.clip(self.wind[0:2], -self.max_horizontal, self.max_horizontal)
+        self.wind[2]   = np.clip(self.wind[2],   -self.max_vertical,   self.max_vertical)
+
+        # Save history
         self.wind_history.append(self.wind.copy())
-        return self.wind
+
+        # Return total wind, which is the sum of mean flow and fluctuations
+        return self.mean_flow + self.wind
 
 # ========== QUADCOPTER ==========
 class Quadcopter:
@@ -176,46 +194,44 @@ class Quadcopter:
         self.forces.append(total_force.copy())
 
         return self.state
-    
-# ========== MAIN SIMULATION ==========
+
+# ========== MAIN SIMULATION ==========#
 def main():
     dt = 0.01
-    duration = 30 #Total simulation time in seconds
+    duration = 30
     time_array = np.arange(0, duration, dt)
-    
-    wind_gen = OUWindGenerator(dt)
+
+    # Mean wind assumed tos be zero 
+    mean_flow = np.array([0.0, 0.0, 0.0])
+    wind_gen = LNSWindGenerator(dt, mean_flow=mean_flow)
     drone = Quadcopter(dt)
-    
-    print("\nQUADCOPTER SPECS:")
-    print(f"  Weight: {drone.weight:.2f}N")
-    print(f"  Max thrust: {4*drone.max_thrust:.0f}N ({4*drone.max_thrust/drone.weight:.0f}x weight)")
-    print(f"  Wind: +/-10 km/h horizontal, +/-2-3 km/h vertical")
-    print("\nStarting simulation...")
-    
+
     max_deviation = 0
     start_time = time.time()
-    
 
     for i, t in enumerate(time_array):
-        wind = wind_gen.update() #Generate wind vector
-        state = drone.update(wind) #Update drone forces with new wind vector
+        #Generate LNS wind
+        wind = wind_gen.update()          
         
-        pos = state[0:3] #Drone position
-        deviation = np.linalg.norm(pos) #Drone distance from origin
+        #Update drone position accordingly
+        state = drone.update(wind)       
+
+        pos = state[0:3]
+        deviation = np.linalg.norm(pos)
         max_deviation = max(max_deviation, deviation)
-        
-        #Print drone position every 500 iterations
+
         if i % 500 == 0:
             pitch_deg = np.degrees(state[6])
             roll_deg = np.degrees(state[7])
             print(f"Time: {t:5.1f}s | Pos: [{pos[0]:6.3f}, {pos[1]:6.3f}, {pos[2]:6.3f}] | "
                   f"Tilt: [{roll_deg:5.1f}, {pitch_deg:5.1f}] deg | Dist: {deviation:5.3f}m")
-    
+
     print(f"\nSimulation complete in {time.time() - start_time:.1f} seconds!")
     print(f"Maximum deviation from origin: {max_deviation:.3f}m")
-    
+
     plot_results(drone, time_array, wind_gen)
 
+# ========== PLOTTING FUNCTION ==========
 def plot_results(drone, time_array, wind_gen):
     positions = np.array(drone.positions)
     angles = np.degrees(np.array(drone.angles))
@@ -328,56 +344,9 @@ def plot_results(drone, time_array, wind_gen):
     ax8.set_zlim([-0.3, 0.3])
     
     plt.suptitle('QUADCOPTER SIMULATION WITH COMPLETE WIND ANALYSIS', 
-                fontsize=16, fontweight='bold', y=1.02)
+        fontsize=16, fontweight='bold', y=1.02)
     plt.tight_layout()
     plt.show()
-    
-    # ========== WIND STATISTICS ==========
-    print("\n" + "=" * 80)
-    print("WIND STATISTICS")
-    print("=" * 80)
-    
-    print(f"\nWind Speeds (km/h):")
-    print(f"  X-direction: Mean = {np.mean(wind_kmh[:, 0]):.1f}, Std = {np.std(wind_kmh[:, 0]):.1f}, Max = {np.max(np.abs(wind_kmh[:, 0])):.1f}")
-    print(f"  Y-direction: Mean = {np.mean(wind_kmh[:, 1]):.1f}, Std = {np.std(wind_kmh[:, 1]):.1f}, Max = {np.max(np.abs(wind_kmh[:, 1])):.1f}")
-    print(f"  Z-direction: Mean = {np.mean(wind_kmh[:, 2]):.1f}, Std = {np.std(wind_kmh[:, 2]):.1f}, Max = {np.max(np.abs(wind_kmh[:, 2])):.1f}")
-    
-    horizontal_wind = np.sqrt(wind_kmh[:, 0]**2 + wind_kmh[:, 1]**2)
-    print(f"\nHorizontal Wind Magnitude:")
-    print(f"  Mean: {np.mean(horizontal_wind):.1f} km/h")
-    print(f"  Max: {np.max(horizontal_wind):.1f} km/h")
-    
-    # ========== PERFORMANCE ANALYSIS ==========
-    print("\n" + "=" * 80)
-    print("PERFORMANCE ANALYSIS")
-    print("=" * 80)
-    
-    final_pos = positions[-1]
-    final_dist = np.linalg.norm(final_pos)
-    avg_dist = np.mean(distance)
-    max_dist = np.max(distance)
-    
-    print(f"\nFinal Position: [{final_pos[0]:.4f}, {final_pos[1]:.4f}, {final_pos[2]:.4f}] m")
-    print(f"Final Distance from Origin: {final_dist:.4f} m")
-    print(f"Average Distance: {avg_dist:.4f} m")
-    print(f"Maximum Distance: {max_dist:.4f} m")
-    
-    success_x = abs(final_pos[0]) < 0.1
-    success_y = abs(final_pos[1]) < 0.1
-    success_z = abs(final_pos[2]) < 0.1
-    
-    print(f"\nAxis Performance:")
-    print(f"  X-axis: {'PASS' if success_x else 'FAIL'} Final: {final_pos[0]:.3f}m (target: 0m)")
-    print(f"  Y-axis: {'PASS' if success_y else 'FAIL'} Final: {final_pos[1]:.3f}m (target: 0m)")
-    print(f"  Z-axis: {'PASS' if success_z else 'FAIL'} Final: {final_pos[2]:.3f}m (target: 0m)")
-    
-    if success_x and success_y and success_z:
-        print("\nSUCCESS! All axes maintain origin despite wind!")
-    else:
-        print("\nSome axes need improvement")
-    
-    print(f"\nMaximum Wind Encountered: {np.max(horizontal_wind):.1f} km/h")
-    print(f"Drone Thrust/Weight Ratio: {4*drone.max_thrust/drone.weight:.0f}:1")
 
 if __name__ == "__main__":
     main()
