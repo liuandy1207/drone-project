@@ -13,12 +13,18 @@ class OUWindGenerator:
         self.dt = dt
         self.wind = np.zeros(3)
         self.wind_history = []
-        
+
     def update(self):
         #Numerical parameters of the OU process
+<<<<<<< HEAD:drone_sim/OU.py
         theta = 0.15 #mean reversion rate
         sigma_h = 3.7 #standard deviation of noise in horizontal direction
         sigma_v = 0.9 #standard deviation of noise in vertical direction
+=======
+        theta = 0.15 # mean reversion rate
+        sigma_h = 2.78 #standard deviation of noise in horizontal direction
+        sigma_v = 0.56 #standard deviation of noise in vertical direction
+>>>>>>> 837c323 (syntax):testing/drone_forces.py
 
         #Long term vertical and horizontal average wind speeds are 0 because the drone is centered about the origin
         mu_h = 0

@@ -52,4 +52,4 @@ p.setGravity(0, 0, -9.81)
 # run the simulation
 while True:
     p.stepSimulation()
-    time.sleep(0.005)      # 0.0003 is slightly slower than reality
+    time.sleep(0.005)      # this depends on hardware
