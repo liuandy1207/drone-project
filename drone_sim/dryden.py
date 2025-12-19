@@ -1,164 +1,69 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from scipy.signal import lti, lsim, welch
 
 print("=" * 80)
-print("QUADCOPTER SIMULATION - TRUE SECOND-ORDER DRYDEN TURBULENCE")
+print("QUADCOPTER SIMULATION - COMPLETE WITH WIND PLOTS")
 print("=" * 80)
 
-# ========== TRUE SECOND-ORDER DRYDEN TURBULENCE GENERATOR ==========
-class TrueDrydenWindGenerator:
-    def __init__(self, dt=0.01, V=5.0, altitude=10.0, turbulence_level='light'):
-        """
-        True Dryden turbulence model from MIL-F-8785C
-        Uses second-order shaping filters with proper PSD
-        """
+# ========== DRYDEN WIND GENERATOR ==========
+class DrydenWindGenerator:
+    def __init__(self, dt=0.01):
         self.dt = dt
-        self.V = V  # Airspeed (m/s)
-        self.altitude = altitude
-        self.turbulence_level = turbulence_level
-        
-        # Set turbulence intensity (sigma) based on level
-        if turbulence_level == 'light':
-            self.sigma_u = 0.5  # m/s
-            self.sigma_v = 0.5  # m/s
-            self.sigma_w = 0.1  # m/s
-        elif turbulence_level == 'moderate':
-            self.sigma_u = 1.0  # m/s
-            self.sigma_v = 1.0  # m/s
-            self.sigma_w = 0.2  # m/s
-        elif turbulence_level == 'severe':
-            self.sigma_u = 2.0  # m/s
-            self.sigma_v = 2.0  # m/s
-            self.sigma_w = 0.4  # m/s
-        else:
-            self.sigma_u = 0.8  # m/s
-            self.sigma_v = 0.8  # m/s
-            self.sigma_w = 0.15  # m/s
-        
-        # Dryden scale lengths (meters) from MIL-F-8785C
-        # These depend on altitude
-        if altitude < 1000:
-            # Low altitude (below 1000 ft / 305 m)
-            self.L_u = altitude / (0.177 + 0.000823*altitude)**1.2
-            self.L_v = self.L_u / 2  # Lateral scale length is half of longitudinal
-            self.L_w = altitude  # Vertical scale length equals altitude
-        else:
-            # High altitude
-            self.L_u = 1750
-            self.L_v = self.L_u / 2
-            self.L_w = 1750
-        
-        # Create discrete-time filters for each component
-        # Dryden transfer functions:
-        # H_u(s) = σ_u * sqrt(2L_u/(πV)) * 1/(1 + L_u*s/V)
-        # H_v(s) = σ_v * sqrt(L_v/(πV)) * (1 + sqrt(3)*L_v*s/V)/(1 + L_v*s/V)^2
-        # H_w(s) = σ_w * sqrt(L_w/(πV)) * (1 + sqrt(3)*L_w*s/V)/(1 + L_w*s/V)^2
-        
-        # Pre-calculate common terms
-        sqrt_pi_V = np.sqrt(np.pi * V)
-        
-        # Longitudinal (u-component) - FIRST ORDER
-        # H_u(s) = σ_u * sqrt(2L_u/(πV)) * 1/(1 + L_u*s/V)
-        A_u = -V / self.L_u
-        B_u = self.sigma_u * np.sqrt(2*self.L_u/(np.pi*V))
-        C_u = 1.0
-        D_u = 0.0
-        
-        # Lateral (v-component) - SECOND ORDER
-        # H_v(s) = σ_v * sqrt(L_v/(πV)) * (1 + sqrt(3)*L_v*s/V)/(1 + L_v*s/V)^2
-        # Expanded: H_v(s) = σ_v * sqrt(L_v/(πV)) * (sqrt(3)*L_v/V * s + 1) / (L_v^2/V^2 * s^2 + 2L_v/V * s + 1)
-        L_v_V = self.L_v / V
-        A_v = np.array([[-2/L_v_V, -1/(L_v_V**2)],
-                        [1, 0]])
-        B_v = np.array([[self.sigma_v * np.sqrt(self.L_v/(np.pi*V)) * np.sqrt(3)*L_v_V],
-                        [0]])
-        C_v = np.array([1.0, self.sigma_v * np.sqrt(self.L_v/(np.pi*V))])
-        D_v = 0.0
-        
-        # Vertical (w-component) - SECOND ORDER (same form as v)
-        L_w_V = self.L_w / V
-        A_w = np.array([[-2/L_w_V, -1/(L_w_V**2)],
-                        [1, 0]])
-        B_w = np.array([[self.sigma_w * np.sqrt(self.L_w/(np.pi*V)) * np.sqrt(3)*L_w_V],
-                        [0]])
-        C_w = np.array([1.0, self.sigma_w * np.sqrt(self.L_w/(np.pi*V))])
-        D_w = 0.0
-        
-        # Convert to discrete-time using zero-order hold
-        self.Ad_u, self.Bd_u, self.Cd_u, self.Dd_u, _ = lti(A_u, B_u, C_u, D_u).to_discrete(dt, method='zoh')
-        self.Ad_v, self.Bd_v, self.Cd_v, self.Dd_v, _ = lti(A_v, B_v, C_v, D_v).to_discrete(dt, method='zoh')
-        self.Ad_w, self.Bd_w, self.Cd_w, self.Dd_w, _ = lti(A_w, B_w, C_w, D_w).to_discrete(dt, method='zoh')
-        
-        # State variables
-        self.x_u = np.zeros(1)
-        self.x_v = np.zeros(2)
-        self.x_w = np.zeros(2)
-        
-        # Output
         self.wind = np.zeros(3)
         self.wind_history = []
         
-        # White noise generator
-        self.rng = np.random.default_rng(seed=42)
+        # Dryden model parameters
+        # Horizontal: sigma = 1.2 m/s (~4.3 km/h) -> most values within ±8-10 km/h
+        # Vertical: sigma = 0.1 m/s (~0.36 km/h) -> most values within ±0.7 km/h (SMALL!)
+        self.sigma_u = 1.2    # Horizontal X
+        self.sigma_v = 1.2    # Horizontal Y  
+        self.sigma_w = 0.1    # Vertical Z - VERY SMALL
         
-        # For PSD verification
-        self.white_noise_u = []
-        self.white_noise_v = []
-        self.white_noise_w = []
+        # Time constants - vertical changes slower
+        self.tau_u = 2.0  # X wind time constant
+        self.tau_v = 2.0  # Y wind time constant
+        self.tau_w = 4.0  # Z wind time constant - longer = slower, more stable
         
-        print(f"\nTRUE DRYDEN MODEL PARAMETERS:")
-        print(f"  Airspeed V: {V:.1f} m/s ({V*3.6:.1f} km/h)")
-        print(f"  Altitude: {altitude:.1f} m")
-        print(f"  Scale lengths: L_u={self.L_u:.1f}m, L_v={self.L_v:.1f}m, L_w={self.L_w:.1f}m")
-        print(f"  Turbulence intensities: σ_u={self.sigma_u:.3f} m/s, σ_v={self.sigma_v:.3f} m/s, σ_w={self.sigma_w:.3f} m/s")
-    
+        # Filter states
+        self.u_filter = 0.0
+        self.v_filter = 0.0
+        self.w_filter = 0.0
+        
     def update(self):
-        # Generate white Gaussian noise (zero mean, unit variance)
-        white_u = self.rng.standard_normal()
-        white_v = self.rng.standard_normal()
-        white_w = self.rng.standard_normal()
+        # Generate white Gaussian noise
+        noise_u = np.random.randn()
+        noise_v = np.random.randn()
+        noise_w = np.random.randn()
         
-        # Store white noise for analysis
-        self.white_noise_u.append(white_u)
-        self.white_noise_v.append(white_v)
-        self.white_noise_w.append(white_w)
+        # Update all components with first order filters (stable)
+        # Horizontal components
+        self.u_filter += (-self.u_filter / self.tau_u + 
+                         self.sigma_u * np.sqrt(2/(self.tau_u * self.dt)) * noise_u) * self.dt
+        self.v_filter += (-self.v_filter / self.tau_v + 
+                         self.sigma_v * np.sqrt(2/(self.tau_v * self.dt)) * noise_v) * self.dt
         
-        # Update longitudinal component (first order)
-        self.x_u = self.Ad_u @ self.x_u + self.Bd_u * white_u
-        u_turb = self.Cd_u @ self.x_u + self.Dd_u * white_u
+        # Vertical component - same structure but smaller variance
+        self.w_filter += (-self.w_filter / self.tau_w + 
+                         self.sigma_w * np.sqrt(2/(self.tau_w * self.dt)) * noise_w) * self.dt
         
-        # Update lateral component (second order)
-        self.x_v = self.Ad_v @ self.x_v + self.Bd_v * white_v
-        v_turb = self.Cd_v @ self.x_v + self.Dd_v * white_v
+        # Set wind components
+        self.wind[0] = self.u_filter
+        self.wind[1] = self.v_filter
+        self.wind[2] = self.w_filter * 0.5  # Additional scaling to ensure it's small
         
-        # Update vertical component (second order)
-        self.x_w = self.Ad_w @ self.x_w + self.Bd_w * white_w
-        w_turb = self.Cd_w @ self.x_w + self.Dd_w * white_w
-        
-        # Combine components
-        self.wind = np.array([u_turb, v_turb, w_turb])
+        # Add occasional horizontal gusts (keep vertical calm)
+        if np.random.rand() < 0.003:  # 0.3% chance each timestep
+            gust_magnitude = np.random.uniform(1.0, 2.5)
+            gust_direction = np.random.uniform(0, 2*np.pi)
+            self.wind[0] += gust_magnitude * np.cos(gust_direction)
+            self.wind[1] += gust_magnitude * np.sin(gust_direction)
+            # No vertical component to gusts
         
         self.wind_history.append(self.wind.copy())
         return self.wind
-    
-    def theoretical_psd(self, f):
-        """Calculate theoretical PSD for verification"""
-        omega = 2 * np.pi * f
-        
-        # Longitudinal PSD
-        Phi_u = (self.sigma_u**2 * 2 * self.L_u / (np.pi * self.V)) / (1 + (self.L_u * omega / self.V)**2)
-        
-        # Lateral PSD
-        Phi_v = (self.sigma_v**2 * self.L_v / (np.pi * self.V)) * (1 + 3*(self.L_v * omega / self.V)**2) / (1 + (self.L_v * omega / self.V)**2)**2
-        
-        # Vertical PSD
-        Phi_w = (self.sigma_w**2 * self.L_w / (np.pi * self.V)) * (1 + 3*(self.L_w * omega / self.V)**2) / (1 + (self.L_w * omega / self.V)**2)**2
-        
-        return Phi_u, Phi_v, Phi_w
 
-# ========== QUADCOPTER (UNCHANGED) ==========
+# ========== QUADCOPTER ==========
 class Quadcopter:
     def __init__(self, dt=0.01):
         # Physical properties - CHANGED TO 0.5 kg (500g)
@@ -306,8 +211,7 @@ def main():
     duration = 30 #Total simulation time in seconds
     time_array = np.arange(0, duration, dt)
     
-    # Create TRUE second-order Dryden wind generator
-    wind_gen = TrueDrydenWindGenerator(dt=dt, V=5.0, altitude=10.0, turbulence_level='moderate')
+    wind_gen = DrydenWindGenerator(dt)
     drone = Quadcopter(dt)
     
     print("\nQUADCOPTER SPECS:")
@@ -316,7 +220,9 @@ def main():
     print(f"  Max thrust per motor: {drone.max_thrust:.1f}N")
     print(f"  Total thrust: {4*drone.max_thrust:.1f}N ({4*drone.max_thrust/drone.weight:.1f}x weight)")
     print(f"  Hover thrust per motor: {drone.hover_thrust:.2f}N")
-    print(f"  Simulation: TRUE Second-Order Dryden Turbulence (MIL-F-8785C)")
+    print(f"\nWIND CONDITIONS (Dryden Model):")
+    print(f"  Horizontal: ~{wind_gen.sigma_u*3.6*2:.1f} km/h peak-to-peak (±{wind_gen.sigma_u*3.6:.1f} km/h)")
+    print(f"  Vertical: ~{wind_gen.sigma_w*3.6*2:.1f} km/h peak-to-peak (±{wind_gen.sigma_w*3.6:.1f} km/h)")
     print("\nStarting simulation...")
     
     max_deviation = 0
@@ -345,9 +251,9 @@ def main():
     print(f"\nSimulation complete in {time.time() - start_time:.1f} seconds!")
     print(f"Maximum deviation from origin: {max_deviation:.3f}m")
     
-    plot_results(drone, time_array, wind_gen, dt)
+    plot_results(drone, time_array, wind_gen)
 
-def plot_results(drone, time_array, wind_gen, dt):
+def plot_results(drone, time_array, wind_gen):
     positions = np.array(drone.positions)
     angles = np.degrees(np.array(drone.angles))
     motors = np.array(drone.motor_history)
@@ -357,7 +263,7 @@ def plot_results(drone, time_array, wind_gen, dt):
     wind_kmh = wind_history * 3.6
     
     # Create figure with 2x4 grid
-    fig = plt.figure(figsize=(20, 12))
+    fig = plt.figure(figsize=(20, 10))
     
     # 1. POSITION PLOT (Top Left)
     ax1 = plt.subplot(2, 4, 1)
@@ -373,14 +279,15 @@ def plot_results(drone, time_array, wind_gen, dt):
     
     # 2. WIND COMPONENTS (Top Center-Left)
     ax2 = plt.subplot(2, 4, 2)
-    ax2.plot(time_array, wind_kmh[:, 0], 'b-', alpha=0.7, linewidth=1, label='Wind X (1st order)')
-    ax2.plot(time_array, wind_kmh[:, 1], 'g-', alpha=0.7, linewidth=1, label='Wind Y (2nd order)')
-    ax2.plot(time_array, wind_kmh[:, 2], 'r-', alpha=0.7, linewidth=1, label='Wind Z (2nd order)')
+    ax2.plot(time_array, wind_kmh[:, 0], 'b-', alpha=0.7, linewidth=1, label='Wind X')
+    ax2.plot(time_array, wind_kmh[:, 1], 'g-', alpha=0.7, linewidth=1, label='Wind Y')
+    ax2.plot(time_array, wind_kmh[:, 2], 'r-', alpha=0.7, linewidth=1, label='Wind Z')
     ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3)
     ax2.set_ylabel('Wind Speed (km/h)')
-    ax2.set_title('TRUE DRYDEN TURBULENCE COMPONENTS')
+    ax2.set_title('WIND COMPONENTS (Dryden Model)')
     ax2.grid(True, alpha=0.3)
     ax2.legend(loc='upper right', fontsize=8)
+    # Set y-limits to show that vertical wind is much smaller
     ax2.set_ylim([-15, 15])
     
     # 3. TILT ANGLES (Top Center-Right)
@@ -420,37 +327,15 @@ def plot_results(drone, time_array, wind_gen, dt):
     ax5.legend(loc='upper right', fontsize=8)
     ax5.set_ylim([0, 0.5])
     
-    # 6. POWER SPECTRAL DENSITY (Bottom Center-Left)
+    # 6. WIND DIRECTION (Bottom Center-Left)
     ax6 = plt.subplot(2, 4, 6)
-    
-    # Calculate empirical PSD from simulation
-    fs = 1/dt  # Sampling frequency
-    
-    # Use Welch method
-    f_u, P_u = welch(wind_history[:, 0], fs=fs, nperseg=min(1024, len(wind_history)), scaling='density')
-    f_v, P_v = welch(wind_history[:, 1], fs=fs, nperseg=min(1024, len(wind_history)), scaling='density')
-    f_w, P_w = welch(wind_history[:, 2], fs=fs, nperseg=min(1024, len(wind_history)), scaling='density')
-    
-    # Calculate theoretical PSD
-    f_theory = np.logspace(-2, np.log10(fs/2), 200)
-    Phi_u_theory, Phi_v_theory, Phi_w_theory = wind_gen.theoretical_psd(f_theory)
-    
-    # Plot empirical PSD
-    ax6.loglog(f_u[f_u>0], P_u[f_u>0], 'b-', alpha=0.5, linewidth=1, label='X (Empirical)')
-    ax6.loglog(f_v[f_v>0], P_v[f_v>0], 'g-', alpha=0.5, linewidth=1, label='Y (Empirical)')
-    ax6.loglog(f_w[f_w>0], P_w[f_w>0], 'r-', alpha=0.5, linewidth=1, label='Z (Empirical)')
-    
-    # Plot theoretical PSD
-    ax6.loglog(f_theory, Phi_u_theory, 'b--', linewidth=2, alpha=0.8, label='X (Theory, 1st order)')
-    ax6.loglog(f_theory, Phi_v_theory, 'g--', linewidth=2, alpha=0.8, label='Y (Theory, 2nd order)')
-    ax6.loglog(f_theory, Phi_w_theory, 'r--', linewidth=2, alpha=0.8, label='Z (Theory, 2nd order)')
-    
-    ax6.set_xlabel('Frequency (Hz)')
-    ax6.set_ylabel('Power Spectral Density (m²/s³)')
-    ax6.set_title('TRUE DRYDEN PSD: EMPIRICAL vs THEORETICAL')
-    ax6.grid(True, alpha=0.3, which='both')
-    ax6.legend(loc='upper right', fontsize=7)
-    ax6.set_xlim([0.01, fs/2])
+    wind_direction = np.degrees(np.arctan2(wind_kmh[:, 1], wind_kmh[:, 0]))
+    ax6.plot(time_array, wind_direction, 'purple', linewidth=1.5, alpha=0.7)
+    ax6.set_xlabel('Time (s)')
+    ax6.set_ylabel('Wind Direction (deg)')
+    ax6.set_title('WIND DIRECTION (0 deg = East)')
+    ax6.grid(True, alpha=0.3)
+    ax6.set_ylim([-180, 180])
     
     # 7. MOTOR THRUSTS (Bottom Center-Right)
     ax7 = plt.subplot(2, 4, 7)
@@ -485,49 +370,31 @@ def plot_results(drone, time_array, wind_gen, dt):
     ax8.set_ylim([-0.5, 0.5])
     ax8.set_zlim([-0.3, 0.3])
     
-    plt.suptitle(f'500g QUADCOPTER WITH TRUE SECOND-ORDER DRYDEN TURBULENCE (MIL-F-8785C)', 
+    plt.suptitle(f'500g QUADCOPTER SIMULATION WITH DRYDEN TURBULENCE MODEL', 
                 fontsize=16, fontweight='bold', y=1.02)
     plt.tight_layout()
     plt.show()
     
-    # ========== TURBULENCE STATISTICS ==========
+    # ========== WIND STATISTICS ==========
     print("\n" + "=" * 80)
-    print("TRUE DRYDEN TURBULENCE STATISTICS")
+    print("WIND STATISTICS (Dryden Model)")
     print("=" * 80)
     
-    print(f"\nTurbulence Statistics (m/s):")
-    print(f"  X-direction (1st order):")
-    print(f"    Mean = {np.mean(wind_history[:, 0]):.4f}, Std = {np.std(wind_history[:, 0]):.4f}")
-    print(f"    Theoretical σ = {wind_gen.sigma_u:.4f}, Ratio = {np.std(wind_history[:, 0])/wind_gen.sigma_u:.3f}")
-    print(f"    Range: [{np.min(wind_history[:, 0]):.3f}, {np.max(wind_history[:, 0]):.3f}]")
+    print(f"\nWind Speeds (km/h):")
+    print(f"  X-direction: Mean = {np.mean(wind_kmh[:, 0]):.2f}, Std = {np.std(wind_kmh[:, 0]):.2f}, "
+          f"Range: [{np.min(wind_kmh[:, 0]):.2f}, {np.max(wind_kmh[:, 0]):.2f}]")
+    print(f"  Y-direction: Mean = {np.mean(wind_kmh[:, 1]):.2f}, Std = {np.std(wind_kmh[:, 1]):.2f}, "
+          f"Range: [{np.min(wind_kmh[:, 1]):.2f}, {np.max(wind_kmh[:, 1]):.2f}]")
+    print(f"  Z-direction: Mean = {np.mean(wind_kmh[:, 2]):.3f}, Std = {np.std(wind_kmh[:, 2]):.3f}, "
+          f"Range: [{np.min(wind_kmh[:, 2]):.3f}, {np.max(wind_kmh[:, 2]):.3f}]")
     
-    print(f"\n  Y-direction (2nd order):")
-    print(f"    Mean = {np.mean(wind_history[:, 1]):.4f}, Std = {np.std(wind_history[:, 1]):.4f}")
-    print(f"    Theoretical σ = {wind_gen.sigma_v:.4f}, Ratio = {np.std(wind_history[:, 1])/wind_gen.sigma_v:.3f}")
-    print(f"    Range: [{np.min(wind_history[:, 1]):.3f}, {np.max(wind_history[:, 1]):.3f}]")
-    
-    print(f"\n  Z-direction (2nd order):")
-    print(f"    Mean = {np.mean(wind_history[:, 2]):.4f}, Std = {np.std(wind_history[:, 2]):.4f}")
-    print(f"    Theoretical σ = {wind_gen.sigma_w:.4f}, Ratio = {np.std(wind_history[:, 2])/wind_gen.sigma_w:.3f}")
-    print(f"    Range: [{np.min(wind_history[:, 2]):.3f}, {np.max(wind_history[:, 2]):.3f}]")
-    
-    # Check PSD characteristics
-    print(f"\nPSD Verification (should match theoretical):")
-    
-    # Calculate spectral moments
-    freq_bins = np.logspace(-2, np.log10(fs/2), 20)
-    freq_centers = (freq_bins[:-1] + freq_bins[1:]) / 2
-    
-    for comp, name in zip([0, 1, 2], ['X', 'Y', 'Z']):
-        # Empirical variance from PSD (Parseval's theorem)
-        f_comp, P_comp = welch(wind_history[:, comp], fs=fs, nperseg=1024, scaling='density')
-        emp_variance = np.trapz(P_comp, f_comp)
-        theo_variance = [wind_gen.sigma_u**2, wind_gen.sigma_v**2, wind_gen.sigma_w**2][comp]
-        
-        print(f"  {name}-component:")
-        print(f"    Empirical variance: {emp_variance:.6f}")
-        print(f"    Theoretical variance: {theo_variance:.6f}")
-        print(f"    Match: {emp_variance/theo_variance:.3f} (1.0 = perfect)")
+    # Compare horizontal vs vertical
+    print(f"\nWind Magnitude Comparison:")
+    horizontal_wind = np.sqrt(wind_kmh[:, 0]**2 + wind_kmh[:, 1]**2)
+    vertical_wind = np.abs(wind_kmh[:, 2])
+    print(f"  Horizontal: Mean = {np.mean(horizontal_wind):.2f} km/h, Max = {np.max(horizontal_wind):.2f} km/h")
+    print(f"  Vertical: Mean = {np.mean(vertical_wind):.3f} km/h, Max = {np.max(vertical_wind):.3f} km/h")
+    print(f"  Ratio (Horizontal/Vertical): {np.mean(horizontal_wind)/np.mean(vertical_wind):.1f}:1")
     
     # ========== PERFORMANCE ANALYSIS ==========
     print("\n" + "=" * 80)
@@ -539,25 +406,9 @@ def plot_results(drone, time_array, wind_gen, dt):
     avg_dist = np.mean(distance)
     max_dist = np.max(distance)
     
-    print(f"\nPosition Statistics:")
-    print(f"  Average Distance: {avg_dist:.4f} m")
-    print(f"  Maximum Distance: {max_dist:.4f} m")
-    print(f"  Final Position: [{final_pos[0]:.4f}, {final_pos[1]:.4f}, {final_pos[2]:.4f}] m")
-    print(f"  Final Distance: {final_dist:.4f} m")
-    
-    success_x = abs(final_pos[0]) < 0.1
-    success_y = abs(final_pos[1]) < 0.1
-    success_z = abs(final_pos[2]) < 0.1
-    
-    print(f"\nAxis Performance (0.1m tolerance):")
-    print(f"  X-axis: {'✓ PASS' if success_x else '✗ FAIL'} ({final_pos[0]:.3f}m)")
-    print(f"  Y-axis: {'✓ PASS' if success_y else '✗ FAIL'} ({final_pos[1]:.3f}m)")
-    print(f"  Z-axis: {'✓ PASS' if success_z else '✗ FAIL'} ({final_pos[2]:.3f}m)")
-    
-    if success_x and success_y and success_z:
-        print("\n✅ SUCCESS! Drone maintains position despite true Dryden turbulence!")
-    else:
-        print("\n⚠️  Controller tuning needed for some axes")
+    print(f"Average Distance: {avg_dist:.4f} m")
+    print(f"Maximum Distance: {max_dist:.4f} m")
+    print(f"Final Position: [{final_pos[0]:.3f}, {final_pos[1]:.3f}, {final_pos[2]:.3f}] m")
     
     # Motor usage statistics
     avg_motor_pct = np.mean(motor_pct)
@@ -566,13 +417,25 @@ def plot_results(drone, time_array, wind_gen, dt):
     print(f"  Average thrust: {avg_motor_pct:.1f}%")
     print(f"  Maximum thrust: {max_motor_pct:.1f}%")
     print(f"  Hover level: {hover_pct:.1f}%")
-    print(f"  Thrust margin: {100 - max_motor_pct:.1f}% remaining")
     
-    print(f"\nTurbulence Summary:")
-    print(f"  Model: TRUE Second-Order Dryden (MIL-F-8785C)")
-    print(f"  Level: {wind_gen.turbulence_level}")
-    print(f"  Airspeed V: {wind_gen.V:.1f} m/s")
-    print(f"  Scale lengths: L_u={wind_gen.L_u:.1f}m, L_v={wind_gen.L_v:.1f}m, L_w={wind_gen.L_w:.1f}m")
+    # Thrust margin
+    thrust_margin = 100 - max_motor_pct
+    print(f"  Thrust margin: {thrust_margin:.1f}% remaining")
+    
+    print(f"\nMaximum Wind Encountered: {np.max(horizontal_wind):.1f} km/h horizontal, "
+          f"{np.max(vertical_wind):.2f} km/h vertical")
+    print(f"Drone Thrust/Weight Ratio: {4*drone.max_thrust/drone.weight:.1f}:1")
+    
+    # ========== DRYDEN MODEL VERIFICATION ==========
+    print("\n" + "=" * 80)
+    print("DRYDEN MODEL VERIFICATION")
+    print("=" * 80)
+    
+    # Check if vertical wind is indeed small
+    vertical_stats = wind_kmh[:, 2]
+    within_range = np.sum(np.abs(vertical_stats) < 1.0) / len(vertical_stats) * 100
+    print(f"Vertical wind within ±1 km/h: {within_range:.1f}% of the time")
+    print(f"Vertical wind within ±0.5 km/h: {np.sum(np.abs(vertical_stats) < 0.5) / len(vertical_stats) * 100:.1f}% of the time")
 
 if __name__ == "__main__":
     main()

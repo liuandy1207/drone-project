@@ -1,151 +1,175 @@
-################################################################################
-#
-#                           OU WIND SIMULATION
-#
-# Authors: Andy Liu, John Chen, Melyssa Choi, Yawen Zheng
-################################################################################
-
 import numpy as np
 import matplotlib.pyplot as plt
 import time
 
+print("=" * 80)
+print("QUADCOPTER SIMULATION - COMPLETE WITH WIND PLOTS")
+print("=" * 80)
+
+# ========== OU WIND GENERATOR ==========
 class OUWindGenerator:
     def __init__(self, dt=0.01):
-        self.dt = dt              # time step for numerical methods (s)
-        self.wind = np.zeros(3)   # creates a 3-component (xyz) wind vector 
-        self.wind_history = []    # stores past wind vectors
-
+        #dt is the time step in seconds
+        self.dt = dt
+        self.wind = np.zeros(3)
+        self.wind_history = []
+        
     def update(self):
-        # OU parameters
-        theta = 0.15    # mean reversion rate (how strongly results are pulled to the average)
-                        # (justification)
-        sigma_h = 0.78  # horizontal noise intensity
-        sigma_v = 0.16  # vertical noise intensity
-                        # (justification)
+        #Numerical parameters of the OU process
+        theta = 0.15 #mean reversion rate
+        sigma_h = 3.7 #standard deviation of noise in horizontal direction
+        sigma_v = 0.9 #standard deviation of noise in vertical direction
 
-        mu_h = 0        # mean horizontal wind speed
-        mu_v = 0        # mean vertical wind speed
-                        # set to zero because the simulation is centered at the origin
-
-        # Euler–Maruyama Method: dW = θ(µ-W)dt + σ dB (Equation ?)
-        # approximates a numerical solution of an SDE
+        #Long term vertical and horizontal average wind speeds are 0 because the drone is centered about the origin
+        mu_h = 0
+        mu_v = 0
+        
+        #Calculate OU process with randomized values for each direction
         self.wind[0] += theta * (mu_h - self.wind[0]) * self.dt + \
                        sigma_h * np.sqrt(self.dt) * np.random.randn()
         self.wind[1] += theta * (mu_h - self.wind[1]) * self.dt + \
                        sigma_h * np.sqrt(self.dt) * np.random.randn()
         self.wind[2] += theta * (mu_v - self.wind[2]) * self.dt + \
                        sigma_v * np.sqrt(self.dt) * np.random.randn()
-    
-        self.wind_history.append(self.wind.copy())  # save generated wind vector to history
+        
+        self.wind_history.append(self.wind.copy())
         return self.wind
 
+# ========== QUADCOPTER ==========
 class Quadcopter:
     def __init__(self, dt=0.01):
-        self.dt = dt                    # time step (s)
-        # physical properties
-        self.mass = 0.25                # same as our real drone (kg)
-        self.weight = self.mass * 10    # gravitaitonal force (N)
+        # Physical properties
+        self.mass = 0.25                   # mass of the quadcopter (kg)
+        self.weight = self.mass * 10       # gravitational force mg (N)
 
-        # state vector: [x, y, z, vx, vy, vz, pitch, roll]
+        self.dt = dt                         # simulation timestep (s)
+
+        # State vector: [x, y, z, vx, vy, vz, pitch, roll]
         self.state = np.zeros(8)
 
-        # motor thrust specifications
-        self.max_thrust = 2.5                   # N
-        self.hover_thrust = self.weight / 4     # thrust per motor to hover
-        self.motor_thrusts = np.array([self.hover_thrust] * 4)  # thrust in each motor
+        # Motor thrust limits
+        self.max_thrust = 2.5           # maximum thrust a motor can output
+        self.hover_thrust = self.weight / 4  # thrust needed per motor to hover
+        self.motor_thrusts = np.array([self.hover_thrust] * 4)
 
-        # histories
+        # Position controller gains (PD + integral on z)
+        self.kp_pos = np.array([8.0, 8.0, 20.0])   # proportional gains (x,y,z)
+        self.kd_pos = np.array([4.0, 4.0, 10.0])   # derivative gains (x,y,z)
+        self.ki_z = 0.5                            # integral gain for altitude
+        self.integral_z = 0                        # accumulated z-error
+
+        # Logging history
         self.positions = []
         self.angles = []
         self.motor_history = []
         self.forces = []
 
-        # proportial derivative (PD) control on position
-        self.kp_pos = np.array([8.0, 8.0, 20.0])   # proportional gains (corrective pull towards origin)
-        self.kd_pos = np.array([4.0, 4.0, 10.0])   # derivative gains (damping effects)
-        self.integral_z = 0                        # accumulates z error for PID to avoid steady state error
-        self.ki_z = 0.5                            # integral gain (corrective pull)
-
     def update(self, wind):
-        # extract components
+        # Extract position, velocity, pitch, and roll
         pos = self.state[0:3]
         vel = self.state[3:6]
         pitch = self.state[6]
         roll = self.state[7]
 
-        # PD controller calculations
-        error = -pos    # error to eliminate to maintain position at origin (hover)
-        desired_acc = self.kp_pos * error + self.kd_pos * (-vel)    # PD corrective acceleartion
-        self.integral_z += error[2] * self.dt               # accumulating error for PID correction in z
-        self.integral_z = np.clip(self.integral_z, -1, 1)   # clamp to avoid integrator windup
-        desired_acc[2] += self.ki_z * self.integral_z       # adds the effect of the integral
+        # Position error (reference point is (0,0,0))
+        error = -pos
+
+        # Compute acceleration
+        desired_acc = self.kp_pos * error + self.kd_pos * (-vel)
+
+        # Integral control altitude (z-axis), because wind is assumed to predominantly in the x and y directions
+        self.integral_z += error[2] * self.dt
+        self.integral_z = np.clip(self.integral_z, -1, 1)
+        desired_acc[2] += self.ki_z * self.integral_z
+
+        # Convert acceleration into required forces
         total_force_needed = self.mass * desired_acc
-        total_force_needed[2] += self.weight    # compensate for gravity
-        total_force_needed += -wind * 0.3       # consider wind effects########################################################
+
+        # Force of gravity
+        total_force_needed[2] += self.weight
+
+        # Add wind disturbance compensation
+        total_force_needed += -wind * 0.3
+
+        # Magnitude of needed thrust 
         thrust_mag_needed = np.linalg.norm(total_force_needed)
 
-        if thrust_mag_needed > 0.01:            # avoid divide by zero
-            thrust_dir = total_force_needed / thrust_mag_needed   # unit vector
-            # limit tilt to be mathematically defined
+        # Calculate desired pitch and roll based on force direction
+        if thrust_mag_needed > 0.01:
+            thrust_dir = total_force_needed / thrust_mag_needed
+
+            # Horizontal thrust components determine pitch and roll
             fx_ratio = np.clip(thrust_dir[0], -0.9, 0.9)
             fy_ratio = np.clip(thrust_dir[1], -0.9, 0.9)
+
             desired_pitch = np.arcsin(fx_ratio)
             desired_roll = -np.arcsin(fy_ratio)
-        else: 
+        else:
+            # If no force required, the angles of pitch and roll are 0
             desired_pitch = 0
             desired_roll = 0
             thrust_mag_needed = self.weight
 
-        # limit tilt to be physically reasonable
+        # Limit pitch and roll angles to ±45°
         max_angle = np.radians(45)
         desired_pitch = np.clip(desired_pitch, -max_angle, max_angle)
         desired_roll = np.clip(desired_roll, -max_angle, max_angle)
 
-        # update roll, pitch
-        angle_tau = 0.08 # angle response time constant for gradual changes
+        # First-order angle response (simulates inertia + motor lag)
+        angle_tau = 0.08
         self.state[6] += (desired_pitch - pitch) * self.dt / angle_tau
         self.state[7] += (desired_roll - roll) * self.dt / angle_tau
-        
+
+        # Update angles after dynamics
         pitch = self.state[6]
         roll = self.state[7]
+
+        # Compute thrust for 4 motors
         base_thrust = thrust_mag_needed / 4
         pitch_adj = pitch 
         roll_adj = roll 
 
-        # adjust thrust for the four motors
+        # Combined thrust from all 4 motors
         self.motor_thrusts = np.array([
-            base_thrust - roll_adj + pitch_adj,   # front-left
-            base_thrust + roll_adj + pitch_adj,   # front-right
-            base_thrust - roll_adj - pitch_adj,   # back-left
-            base_thrust + roll_adj - pitch_adj    # back-right
+            base_thrust - roll_adj + pitch_adj,   # Front-left
+            base_thrust + roll_adj + pitch_adj,   # Front-right
+            base_thrust - roll_adj - pitch_adj,   # Back-left
+            base_thrust + roll_adj - pitch_adj    # Back-right
         ])
-        # prevent motor thrust from going to zero
+
+        # Prevent motors from going to zero
         self.motor_thrusts = np.maximum(self.motor_thrusts, 0.1)
 
-        # compute thrust forces
+        # Compute thrust forces
         total_thrust = np.sum(self.motor_thrusts)
         thrust_x = np.sin(pitch) * total_thrust
         thrust_y = -np.sin(roll) * total_thrust
         thrust_z = np.cos(pitch) * np.cos(roll) * total_thrust
         thrust_force = np.array([thrust_x, thrust_y, thrust_z])
 
-        # linear drag force approximation
+        # Parameters for drag force calculated with linear approximation
         drag_coeff = 0.2
         drag_force = -drag_coeff * (vel - wind)
 
-        # gravity 
+        # Gravity 
         gravity_force = np.array([0, 0, -self.weight])
 
-        # net force and acceleration
+        # Net force
         total_force = thrust_force + drag_force + gravity_force
+
+        # F = ma 
         acceleration = total_force / self.mass
 
-        # update velocity and position
+        # Update velocity with acceleration
         self.state[3:6] += acceleration * self.dt
-        self.state[0:3] += self.state[3:6] * self.dt
-        self.state[0:3] = np.clip(self.state[0:3], -10, 10) # bound on position for the simulation
 
-        # save result to history
+        # Update position
+        self.state[0:3] += self.state[3:6] * self.dt
+
+        # Limit position to within ±10 m
+        self.state[0:3] = np.clip(self.state[0:3], -10, 10)
+
+        # Log changes in position and forces
         self.positions.append(pos.copy())
         self.angles.append([pitch, roll])
         self.motor_history.append(self.motor_thrusts.copy())
@@ -153,9 +177,10 @@ class Quadcopter:
 
         return self.state
     
+# ========== MAIN SIMULATION ==========
 def main():
     dt = 0.01
-    duration = 30       # total simulation time
+    duration = 30 #Total simulation time in seconds
     time_array = np.arange(0, duration, dt)
     
     wind_gen = OUWindGenerator(dt)
@@ -170,15 +195,16 @@ def main():
     max_deviation = 0
     start_time = time.time()
     
-    for i, t in enumerate(time_array):  # for each time step
-        wind = wind_gen.update()    # generate a wind vectors
-        state = drone.update(wind)  # update drone state
 
-        pos = state[0:3] # extrac position
-        deviation = np.linalg.norm(pos) # extract distance from the origin
+    for i, t in enumerate(time_array):
+        wind = wind_gen.update() #Generate wind vector
+        state = drone.update(wind) #Update drone forces with new wind vector
+        
+        pos = state[0:3] #Drone position
+        deviation = np.linalg.norm(pos) #Drone distance from origin
         max_deviation = max(max_deviation, deviation)
         
-        # print progress every 500 time steps
+        #Print drone position every 500 iterations
         if i % 500 == 0:
             pitch_deg = np.degrees(state[6])
             roll_deg = np.degrees(state[7])
