@@ -19,8 +19,8 @@ class OUWindGenerator:
         # OU parameters
         theta = 0.15    # mean reversion rate (how strongly results are pulled to the average)
                         # (justification)
-        sigma_h = 2.78  # horizontal noise intensity
-        sigma_v = 0.56  # vertical noise intensity
+        sigma_h = 0.78  # horizontal noise intensity
+        sigma_v = 0.16  # vertical noise intensity
                         # (justification)
 
         mu_h = 0        # mean horizontal wind speed
