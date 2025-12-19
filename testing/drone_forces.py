@@ -48,7 +48,7 @@ class Quadcopter:
         self.state = np.zeros(8)
 
         # Motor thrust limits
-        self.max_thrust = 10            # maximum thrust a motor can output
+        self.max_thrust = 2.5           # maximum thrust a motor can output
         self.hover_thrust = self.weight / 4  # thrust needed per motor to hover
         self.motor_thrusts = np.array([self.hover_thrust] * 4)
 
