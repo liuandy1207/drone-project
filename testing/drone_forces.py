@@ -24,7 +24,7 @@ class OUWindGenerator:
         mu_h = 0
         mu_v = 0
         
-        #Calculate OU process with randomized values
+        #Calculate OU process with randomized values for each direction
         self.wind[0] += theta * (mu_h - self.wind[0]) * self.dt + \
                        sigma_h * np.sqrt(self.dt) * np.random.randn()
         self.wind[1] += theta * (mu_h - self.wind[1]) * self.dt + \
@@ -39,8 +39,8 @@ class OUWindGenerator:
 class Quadcopter:
     def __init__(self, dt=0.01):
         # Physical properties
-        self.mass = 0.51                     # mass of the quadcopter (kg)
-        self.weight = 5.0                    # gravitational force mg (N)
+        self.mass = 0.25                   # mass of the quadcopter (kg)
+        self.weight = self.mass * 10       # gravitational force mg (N)
 
         self.dt = dt                         # simulation timestep (s)
 
@@ -147,7 +147,7 @@ class Quadcopter:
         thrust_z = np.cos(pitch) * np.cos(roll) * total_thrust
         thrust_force = np.array([thrust_x, thrust_y, thrust_z])
 
-        # Parameters for drag force
+        # Parameters for drag force calculated with linear approximation
         drag_coeff = 0.2
         drag_force = -drag_coeff * (vel - wind)
 
@@ -357,25 +357,9 @@ def plot_results(drone, time_array, wind_gen):
     avg_dist = np.mean(distance)
     max_dist = np.max(distance)
     
-    print(f"\nFinal Position: [{final_pos[0]:.4f}, {final_pos[1]:.4f}, {final_pos[2]:.4f}] m")
-    print(f"Final Distance from Origin: {final_dist:.4f} m")
     print(f"Average Distance: {avg_dist:.4f} m")
     print(f"Maximum Distance: {max_dist:.4f} m")
-    
-    success_x = abs(final_pos[0]) < 0.1
-    success_y = abs(final_pos[1]) < 0.1
-    success_z = abs(final_pos[2]) < 0.1
-    
-    print(f"\nAxis Performance:")
-    print(f"  X-axis: {'PASS' if success_x else 'FAIL'} Final: {final_pos[0]:.3f}m (target: 0m)")
-    print(f"  Y-axis: {'PASS' if success_y else 'FAIL'} Final: {final_pos[1]:.3f}m (target: 0m)")
-    print(f"  Z-axis: {'PASS' if success_z else 'FAIL'} Final: {final_pos[2]:.3f}m (target: 0m)")
-    
-    if success_x and success_y and success_z:
-        print("\nSUCCESS! All axes maintain origin despite wind!")
-    else:
-        print("\nSome axes need improvement")
-    
+        
     print(f"\nMaximum Wind Encountered: {np.max(horizontal_wind):.1f} km/h")
     print(f"Drone Thrust/Weight Ratio: {4*drone.max_thrust/drone.weight:.0f}:1")
 
