@@ -44,7 +44,7 @@ class Quadcopter:
         self.dt = dt                    # time step (s)
         # physical properties
         self.mass = 0.25                # same as our real drone (kg)
-        self.weight = self.mass * 10    # gravitaitonal force (N)
+        self.weight = self.mass * 9.81    # gravitaitonal force (N)
 
         # state vector: [x, y, z, vx, vy, vz, pitch, roll]
         self.state = np.zeros(8)
@@ -81,7 +81,7 @@ class Quadcopter:
         desired_acc[2] += self.ki_z * self.integral_z       # adds the effect of the integral
         total_force_needed = self.mass * desired_acc
         total_force_needed[2] += self.weight    # compensate for gravity
-        total_force_needed += -wind * 0.3       # consider wind effects########################################################
+        total_force_needed += -wind * 0.3       # consider wind effects
         thrust_mag_needed = np.linalg.norm(total_force_needed)
 
         if thrust_mag_needed > 0.01:            # avoid divide by zero

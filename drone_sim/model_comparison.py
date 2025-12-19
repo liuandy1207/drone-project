@@ -5,10 +5,6 @@ from scipy import signal, stats
 import warnings
 warnings.filterwarnings('ignore')
 
-print("=" * 80)
-print("COMPARATIVE QUADCOPTER SIMULATION - OU vs DRYDEN WIND MODELS")
-print("=" * 80)
-
 # ========== YOUR EXISTING WIND GENERATORS ==========
 class OUWindGenerator:
     def __init__(self, dt=0.01):
