@@ -29,6 +29,10 @@ class LNSWindGenerator:
             [0.0, 0.0, 0.2]
         ])
 
+        # Set maximum deviations in x and y directions
+        self.max_horizontal = 2.78  
+        self.max_vertical = 0.56 
+
         # Set mean flow to 0
         self.mean_flow = np.zeros(3)
 
@@ -38,6 +42,10 @@ class LNSWindGenerator:
 
         # Calculate position update using the Linearized Navier-Stokes equation
         self.wind += self.A @ self.wind * self.dt + self.B @ dW
+
+        # Apply maximum deviation limits
+        self.wind[0:2] = np.clip(self.wind[0:2], -self.max_horizontal, self.max_horizontal)
+        self.wind[2]   = np.clip(self.wind[2],   -self.max_vertical,   self.max_vertical)
 
         # Save history
         self.wind_history.append(self.wind.copy())
