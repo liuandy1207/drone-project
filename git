@@ -1,0 +1,247 @@
+[33mcommit b97aec71d0b2c3c875738e6ed111afb33221a5cd[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Fri Dec 19 17:16:19 2025 -0800
+
+    a
+
+[33mcommit 50ae4f460cf3598a158f9a3f02f18882173ae63f[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Fri Dec 19 20:15:32 2025 -0500
+
+    true dryden comparison
+
+[33mcommit 0ef7097c4130867b387693dc35789c1a94ccec60[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Fri Dec 19 20:09:08 2025 -0500
+
+    dryden finally
+
+[33mcommit 0cbef4c6692b2c809028f763686e00a4c6f391d2[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Fri Dec 19 16:50:17 2025 -0800
+
+    andy
+
+[33mcommit b443678e3d02cd04d9ed2b9cbd0425ea60ba4317[m
+Merge: cc28f3f c5002e4
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Fri Dec 19 15:09:59 2025 -0800
+
+    add
+
+[33mcommit cc28f3f4001d5acc46abbb0e6067c3b46aa9d3dc[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Fri Dec 19 15:07:39 2025 -0800
+
+    second order
+
+[33mcommit c5002e4b5838be1d05b259eae0268194f6937f85[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Fri Dec 19 17:08:33 2025 -0500
+
+    comments
+
+[33mcommit f688caec488bac99ae0f09043a46d210f138c6a0[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Fri Dec 19 14:59:33 2025 -0500
+
+    comments
+
+[33mcommit 3b9fddbecf96a72f34047d735032b07f4ae5c15d[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Fri Dec 19 05:52:53 2025 -0500
+
+    organization
+
+[33mcommit 31b76de0f991e6997627980b667eaa7d07f92e41[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Fri Dec 19 05:50:46 2025 -0500
+
+    issues
+
+[33mcommit 942ae305ae35a070bad82d52c5100cb3406bf08f[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Fri Dec 19 00:25:35 2025 -0800
+
+    OUtracked
+
+[33mcommit 3fe6c1d082ff507cb267db41f1ebeb5c8737b4a0[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Thu Dec 18 22:32:13 2025 -0800
+
+    dreden
+
+[33mcommit 3c4b22f7248516c5844177f18c2391b09f3a460e[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Thu Dec 18 19:46:02 2025 -0800
+
+    renamed:
+
+[33mcommit b47dab0e53c840570330caa90427bf38664c90ef[m
+Merge: 378eb54 564a83d
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Thu Dec 18 19:45:17 2025 -0800
+
+    added
+
+[33mcommit 378eb54831043d3ef896b49fdcb0fd2af7fe834a[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Thu Dec 18 19:43:47 2025 -0800
+
+    removed some stuff
+
+[33mcommit 564a83d32638b9f0df379c3cbd1ef8d6990c4b64[m
+Author: zyw-66 <yawenzh2010@gmail.com>
+Date:   Thu Dec 18 22:43:35 2025 -0500
+
+    Update lns.py with maximum deviation limits
+
+[33mcommit 3d1bffb8bc14f6aafece49da55ad3d8289c4f3cb[m
+Author: zyw-66 <yawenzh2010@gmail.com>
+Date:   Thu Dec 18 22:42:12 2025 -0500
+
+    Update drone_forces.py with maximum deviation limits
+
+[33mcommit 064be876c12a659537e4c77e230f46392acfbf67[m
+Author: zyw-66 <yawenzh2010@gmail.com>
+Date:   Thu Dec 18 22:30:05 2025 -0500
+
+    Create lns.py
+
+[33mcommit bb2bcbe7324b7df67b6485c796cf9783b0363dff[m
+Author: zyw-66 <yawenzh2010@gmail.com>
+Date:   Thu Dec 18 22:29:33 2025 -0500
+
+    Create lns.py
+
+[33mcommit 9768d4b3f9e40380ccd46ae5a46ef12660ebdce8[m
+Author: zyw-66 <yawenzh2010@gmail.com>
+Date:   Thu Dec 18 22:28:49 2025 -0500
+
+    Create lns.py
+
+[33mcommit e12a988c59e34677f02ea2658173884e2c34b486[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Thu Dec 18 16:07:59 2025 -0800
+
+    changed values
+
+[33mcommit 5ae2bd26cbef94d0ff456d20ee926a99a031de5f[m
+Merge: 1db8898 1abfac9
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Thu Dec 18 15:01:00 2025 -0800
+
+    Merge branch 'main' of https://github.com/liuandy1207/drone-project
+
+[33mcommit 1db88982527d45a0c3d5694cc9439cfae6752d26[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Thu Dec 18 15:00:41 2025 -0800
+
+    updated plots
+
+[33mcommit 1abfac9ae0ea0cd72bc01136d2429376bd31fc1c[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Thu Dec 18 17:53:08 2025 -0500
+
+    idk
+
+[33mcommit 93ddfa540286b41e2c78d4363f9f37df356ab9d9[m
+Author: zyw-66 <yawenzh2010@gmail.com>
+Date:   Tue Dec 2 19:44:21 2025 -0500
+
+    Combine graphs in drone_forces.py
+
+[33mcommit 231fd3e8b1f24ab22247bf9af56a6b3cc391e63d[m
+Author: zyw-66 <yawenzh2010@gmail.com>
+Date:   Tue Dec 2 19:22:13 2025 -0500
+
+    Rename drone_forces to drone_forces.py
+
+[33mcommit d3add7f1f5074a0722adcfc684cf3aedc030f14c[m
+Author: zyw-66 <yawenzh2010@gmail.com>
+Date:   Tue Dec 2 19:21:30 2025 -0500
+
+    Create drone_forces
+
+[33mcommit 1540d64023a22ba29394bff1a0e164c43bdb8d44[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Tue Dec 2 18:26:17 2025 -0500
+
+    code changes
+
+[33mcommit 9798e97ac1e25120830e099f1474d3e2e1f12dad[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Mon Dec 1 20:40:35 2025 -0500
+
+    modified code
+
+[33mcommit 9c0ac034f18f40c1333a6eae5ece4436a391ef32[m
+Merge: 6979acc 2408b4c
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Sun Nov 30 18:00:48 2025 -0500
+
+    Merge branch 'main' of https://github.com/liuandy1207/drone-project
+    
+    hi
+
+[33mcommit 6979acc84a5b4389109aa16e394d619f3f82a252[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Sun Nov 30 18:00:33 2025 -0500
+
+    worked on drone cad and sim
+
+[33mcommit 2408b4ca4289daefd1f4534260db8bcbadadb9bb[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Sun Nov 30 17:28:28 2025 -0500
+
+    set up main
+
+[33mcommit 160d7247e6650e8655cd974a666d3a88d3c87899[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Sun Nov 30 16:36:03 2025 -0500
+
+    instruction
+
+[33mcommit e5638c97fd13f82fbf4bbf60ef576f556c6cb738[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Sun Nov 30 16:16:55 2025 -0500
+
+    organized stuff
+
+[33mcommit b7639a5fd8c96a91d31c8721f3a8a9f3960a0e3f[m
+Author: zyw-66 <yawenzh2010@gmail.com>
+Date:   Sun Nov 30 16:16:07 2025 -0500
+
+    Add files via upload
+
+[33mcommit c2625d96be60890a11b1e8e8f54ec7f22fcd1a6f[m
+Author: JohnOperatingSystem <johnchen.jzc@gmail.com>
+Date:   Sun Nov 30 16:13:50 2025 -0500
+
+    andy
+
+[33mcommit acfe1b4d6cfe4ebaf453c7be599006f501efc38f[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Sun Nov 30 16:12:45 2025 -0500
+
+    github
+
+[33mcommit cd8ec879e89616d994f1d36ebba498b511c5e3ba[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Sun Nov 30 16:00:55 2025 -0500
+
+    drone stufffff
+
+[33mcommit eb5c7192a2c7417ea0785b347aa9c899b87ebd15[m
+Author: liuandy1207 <liuandy1207@gmail.com>
+Date:   Sun Nov 30 11:20:07 2025 -0500
+
+    cube demo js with gravity
+
+[33mcommit 2118325ea787e0460feedb7ac3693c5c288e1e23[m
+Author: He Ming (Andy) Liu <liuandy1207@gmail.com>
+Date:   Sun Nov 30 11:01:39 2025 -0500
+
+    Add installation guide for PyBullet on Mac
+    
+    Added installation guide for running PyBullet on Mac using Conda.
