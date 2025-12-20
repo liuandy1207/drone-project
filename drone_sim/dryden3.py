@@ -20,9 +20,9 @@ class DrydenWindGenerator:
         self.wind_history = []
 
         # Standard deviations
-        self.sigma_u = 1.2   # longitudinal
-        self.sigma_v = 1.2   # lateral
-        self.sigma_w = 0.1   # vertical (small)
+        self.sigma_u = 0.68   # longitudinal
+        self.sigma_v = 0.68   # lateral
+        self.sigma_w = 0.13   # vertical (small)
 
         # Time constants
         self.tau_u = 2.0
@@ -48,7 +48,6 @@ class DrydenWindGenerator:
         nu_u = np.random.randn() / np.sqrt(dt)
         nu_v = np.random.randn() / np.sqrt(dt)
         nu_w = np.random.randn() / np.sqrt(dt)
-
 
         # ---- Longitudinal (1st order) ----
         du = (
