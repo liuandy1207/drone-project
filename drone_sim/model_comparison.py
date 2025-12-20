@@ -842,9 +842,9 @@ def plot_comprehensive_comparison(ou_data, dryden_data, ou_all_metrics, dryden_a
     ax8.set_title('3D TRAJECTORY COMPARISON')
     ax8.legend()
     ax8.grid(True, alpha=0.3)
-    ax8.set_xlim([-0.5, 0.5])
-    ax8.set_ylim([-0.5, 0.5])
-    ax8.set_zlim([-0.3, 0.3])
+    ax8.set_xlim([-0.05, 0.05])
+    ax8.set_ylim([-0.05, 0.05])
+    ax8.set_zlim([-0.05, 0.05])
     
     # 9. MOTOR THRUST VARIANCE
     ax9 = plt.subplot(3, 4, 9)
