@@ -34,41 +34,68 @@ class DrydenWindGenerator:
         self.dt = dt
         self.wind = np.zeros(3)
         self.wind_history = []
-        
-        self.sigma_u = 1.2
-        self.sigma_v = 1.2
-        self.sigma_w = 0.1
-        
+
+        # Standard deviations
+        self.sigma_u = 1.2   # longitudinal
+        self.sigma_v = 1.2   # lateral
+        self.sigma_w = 0.1   # vertical (small)
+
+        # Time constants
         self.tau_u = 2.0
         self.tau_v = 2.0
         self.tau_w = 4.0
-        
-        self.u_filter = 0.0
-        self.v_filter = 0.0
-        self.w_filter = 0.0
-        
+
+        # ---- STATES ----
+        # u: first order
+        self.u = 0.0
+
+        # v: second order (v, v_dot)
+        self.v = 0.0
+        self.v_dot = 0.0
+
+        # w: second order (w, w_dot)
+        self.w = 0.0
+        self.w_dot = 0.0
+
     def update(self):
-        noise_u = np.random.randn()
-        noise_v = np.random.randn()
-        noise_w = np.random.randn()
-        
-        self.u_filter += (-self.u_filter / self.tau_u + 
-                         self.sigma_u * np.sqrt(2/(self.tau_u * self.dt)) * noise_u) * self.dt
-        self.v_filter += (-self.v_filter / self.tau_v + 
-                         self.sigma_v * np.sqrt(2/(self.tau_v * self.dt)) * noise_v) * self.dt
-        self.w_filter += (-self.w_filter / self.tau_w + 
-                         self.sigma_w * np.sqrt(2/(self.tau_w * self.dt)) * noise_w) * self.dt
-        
-        self.wind[0] = self.u_filter
-        self.wind[1] = self.v_filter
-        self.wind[2] = self.w_filter * 0.5
-        
-        if np.random.rand() < 0.003:
-            gust_magnitude = np.random.uniform(1.0, 2.5)
-            gust_direction = np.random.uniform(0, 2*np.pi)
-            self.wind[0] += gust_magnitude * np.cos(gust_direction)
-            self.wind[1] += gust_magnitude * np.sin(gust_direction)
-        
+        dt = self.dt
+
+        # White noise inputs
+        nu_u = np.random.randn() / np.sqrt(dt)
+        nu_v = np.random.randn() / np.sqrt(dt)
+        nu_w = np.random.randn() / np.sqrt(dt)
+
+
+        # ---- Longitudinal (1st order) ----
+        du = (
+            -self.u / self.tau_u
+            + self.sigma_u * np.sqrt(2 / self.tau_u) * nu_u
+        )
+        self.u += du * dt
+
+        # ---- Lateral (2nd order) ----
+        dv_dot = (
+            -2 / self.tau_v * self.v_dot
+            - 1 / (self.tau_v**2) * self.v
+            + self.sigma_v * np.sqrt(3 / self.tau_v) * nu_v
+        )
+        self.v_dot += dv_dot * dt
+        self.v += self.v_dot * dt
+
+        # ---- Vertical (2nd order, slower + smaller) ----
+        dw_dot = (
+            -2 / self.tau_w * self.w_dot
+            - 1 / (self.tau_w**2) * self.w
+            + self.sigma_w * np.sqrt(3 / self.tau_w) * nu_w
+        )
+        self.w_dot += dw_dot * dt
+        self.w += self.w_dot * dt
+
+        # Output wind vector
+        self.wind[0] = self.u
+        self.wind[1] = self.v
+        self.wind[2] = self.w
+
         self.wind_history.append(self.wind.copy())
         return self.wind
 
