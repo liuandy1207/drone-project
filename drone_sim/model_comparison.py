@@ -14,7 +14,7 @@ class OUWindGenerator:
         
     def update(self):
         theta = 0.15
-        sigma_h = 0.91
+        sigma_h = 0.68
         sigma_v = 0.13
         mu_h = 0
         mu_v = 0
