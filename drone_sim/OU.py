@@ -17,8 +17,8 @@ class OUWindGenerator:
     def update(self):
         #Numerical parameters of the OU process
         theta = 0.15 #mean reversion rate
-        sigma_h = 3.7 #standard deviation of noise in horizontal direction
-        sigma_v = 0.9 #standard deviation of noise in vertical direction
+        sigma_h = 0.68 #standard deviation of noise in horizontal direction
+        sigma_v = 0.13 #standard deviation of noise in vertical direction
 
         #Long term vertical and horizontal average wind speeds are 0 because the drone is centered about the origin
         mu_h = 0
